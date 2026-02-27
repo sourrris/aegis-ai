@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR"
+
+if ! command -v brew >/dev/null 2>&1; then
+  echo "Homebrew is required. Install it first: https://brew.sh/" >&2
+  exit 1
+fi
+
+FORMULAE=(python@3.11 postgresql@16 redis rabbitmq)
+MISSING=()
+for formula in "${FORMULAE[@]}"; do
+  if ! brew list --versions "$formula" >/dev/null 2>&1; then
+    MISSING+=("$formula")
+  fi
+done
+
+if [[ "${#MISSING[@]}" -gt 0 ]]; then
+  echo "Installing missing Homebrew formulae: ${MISSING[*]}"
+  brew install "${MISSING[@]}"
+else
+  echo "All required Homebrew formulae are already installed."
+fi
+
+echo "Starting local infrastructure services..."
+brew services start postgresql@16 >/dev/null
+brew services start redis >/dev/null
+brew services start rabbitmq >/dev/null
+
+PG_PREFIX="$(brew --prefix postgresql@16)"
+PSQL="$PG_PREFIX/bin/psql"
+
+echo "Initializing PostgreSQL role/database/schema..."
+"$PSQL" -d postgres -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='risk') THEN CREATE ROLE risk LOGIN PASSWORD 'risk'; ELSE ALTER ROLE risk LOGIN PASSWORD 'risk'; END IF; END \$\$;"
+if [[ "$("$PSQL" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='risk_monitor'")" != "1" ]]; then
+  "$PSQL" -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE risk_monitor OWNER risk;"
+fi
+"$PSQL" -d risk_monitor -v ON_ERROR_STOP=1 -f "$ROOT_DIR/infra/postgres/init/001_schema.sql" >/dev/null
+"$PSQL" -d risk_monitor -v ON_ERROR_STOP=1 -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO risk; GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO risk; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO risk; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO risk;" >/dev/null
+
+PYTHON_BIN="$(brew --prefix)/bin/python3.11"
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  PYTHON_BIN="$(brew --prefix python@3.11)/bin/python3.11"
+fi
+
+echo "Setting up Python virtual environment..."
+"$PYTHON_BIN" -m venv "$ROOT_DIR/.venv"
+# shellcheck disable=SC1091
+source "$ROOT_DIR/.venv/bin/activate"
+pip install --upgrade pip >/dev/null
+pip install -e "$ROOT_DIR/backend/libs/common" >/dev/null
+pip install -r "$ROOT_DIR/backend/services/api_gateway/requirements.txt" >/dev/null
+pip install -r "$ROOT_DIR/backend/services/event_worker/requirements.txt" >/dev/null
+pip install -r "$ROOT_DIR/backend/services/ml_inference/requirements.txt" >/dev/null
+pip install -r "$ROOT_DIR/backend/services/notification_service/requirements.txt" >/dev/null
+pip install greenlet >/dev/null
+
+echo "Installing frontend dependencies..."
+(cd "$ROOT_DIR/frontend/dashboard" && npm install >/dev/null)
+
+cat > "$ROOT_DIR/frontend/dashboard/.env.local" <<'EOF'
+VITE_API_BASE_URL=http://localhost:8000
+VITE_WS_BASE_URL=http://localhost:8020
+EOF
+
+echo
+echo "Local setup complete."
+echo "Next: ./scripts/local/start.sh"
