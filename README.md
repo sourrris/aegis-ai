@@ -16,14 +16,23 @@ Production-grade distributed scaffold for real-time AI risk monitoring with Fast
 
 ## Quick Start
 1. Copy `.env.example` to `.env` and set secrets.
-2. Run:
+2. Start services and auto-open local URLs in browser tabs:
 
 ```bash
-docker compose up --build
+./scripts/up-and-open.sh
 ```
 
-3. Open dashboard at `http://localhost:5173`.
-4. RabbitMQ management at `http://localhost:15672` (`guest/guest`).
+3. Optional: if you override domains to non-`*.localhost` values in `.env`, add host mappings once:
+
+```bash
+./scripts/setup-local-domains.sh
+```
+
+4. The script opens:
+   - Dashboard `http://app.localhost`
+   - API docs `http://api.localhost/docs`
+   - Notification status `http://ws.localhost/v1/notifications/connections`
+   - RabbitMQ `http://localhost:15672` (`guest/guest`)
 
 ## Default Demo Credentials
 - username: `admin`

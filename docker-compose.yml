@@ -79,6 +79,7 @@ services:
     environment:
       SERVICE_NAME: api-gateway
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CORS_ALLOW_ORIGINS: http://${LOCAL_APP_DOMAIN:-app.localhost},http://localhost:5173,http://127.0.0.1:5173
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       REDIS_URL: redis://redis:6379/0
       POSTGRES_DSN: postgresql+asyncpg://${POSTGRES_USER:-risk}:${POSTGRES_PASSWORD:-risk}@postgres:5432/${POSTGRES_DB:-risk_monitor}
@@ -165,11 +166,30 @@ services:
       dockerfile: frontend/dashboard/Dockerfile
     container_name: risk-dashboard
     environment:
-      VITE_API_BASE_URL: http://localhost:8000
-      VITE_WS_BASE_URL: http://localhost:8020
+      VITE_API_BASE_URL: http://${LOCAL_API_DOMAIN:-api.localhost}
+      VITE_WS_BASE_URL: http://${LOCAL_WS_DOMAIN:-ws.localhost}
     ports:
       - '5173:5173'
     depends_on:
+      api-gateway:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+
+  local-gateway:
+    image: caddy:2-alpine
+    container_name: risk-local-gateway
+    environment:
+      LOCAL_APP_DOMAIN: ${LOCAL_APP_DOMAIN:-app.localhost}
+      LOCAL_API_DOMAIN: ${LOCAL_API_DOMAIN:-api.localhost}
+      LOCAL_WS_DOMAIN: ${LOCAL_WS_DOMAIN:-ws.localhost}
+    ports:
+      - '80:80'
+    volumes:
+      - ./infra/reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      dashboard:
+        condition: service_started
       api-gateway:
         condition: service_healthy
       notification-service:

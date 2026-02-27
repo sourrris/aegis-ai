@@ -41,7 +41,7 @@ class BaseServiceSettings(BaseSettings):
 
 class ApiGatewaySettings(BaseServiceSettings):
     service_name: str = "api-gateway"
-    cors_allow_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    cors_allow_origins: str = "http://app.localhost,http://localhost:5173,http://127.0.0.1:5173"
 
     @property
     def cors_origins(self) -> list[str]:

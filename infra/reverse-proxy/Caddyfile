@@ -1,0 +1,15 @@
+{
+    auto_https off
+}
+
+http://{$LOCAL_APP_DOMAIN} {
+    reverse_proxy dashboard:5173
+}
+
+http://{$LOCAL_API_DOMAIN} {
+    reverse_proxy api-gateway:8000
+}
+
+http://{$LOCAL_WS_DOMAIN} {
+    reverse_proxy notification-service:8020
+}
