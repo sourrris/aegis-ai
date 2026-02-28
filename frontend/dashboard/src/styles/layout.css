@@ -151,6 +151,47 @@
   background: var(--surface);
 }
 
+.toast-stack {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 1100;
+  display: grid;
+  gap: 0.5rem;
+  width: min(420px, calc(100vw - 2rem));
+}
+
+.toast-item {
+  border: 1px solid color-mix(in srgb, var(--status-success) 35%, var(--border));
+  background: color-mix(in srgb, var(--status-success) 10%, var(--surface));
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  padding: 0.6rem 0.75rem;
+  display: grid;
+  gap: 0.2rem;
+  animation: toastIn 180ms ease-out;
+}
+
+.toast-item strong {
+  font-size: 0.86rem;
+}
+
+.toast-item span {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (max-width: 1200px) {
   .shell {
     grid-template-columns: 80px 1fr;
@@ -193,5 +234,11 @@
 
   .command-actions {
     flex-wrap: wrap;
+  }
+
+  .toast-stack {
+    left: 0.75rem;
+    right: 0.75rem;
+    width: auto;
   }
 }

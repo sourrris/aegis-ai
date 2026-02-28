@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime
+from uuid import UUID, uuid4
 
 import httpx
 from risk_common.messaging import publish_json
+from risk_common.security import create_access_token
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.connectors import BaseConnector, ConnectorResult, default_connectors
@@ -134,6 +136,18 @@ class ConnectorScheduler:
                     upserts = await self._persist_result(session, result)
                     await session.commit()
 
+                auto_ingest_details = await self._auto_ingest_reference_event(
+                    run_id=run_id,
+                    source_name=connector.source_name,
+                    status=status,
+                    version=result.version,
+                    checksum=result.checksum,
+                    fetched_records=result.fetched_records,
+                    upserted_records=upserts,
+                )
+                if auto_ingest_details:
+                    details.update(auto_ingest_details)
+
                 await ConnectorRepository.finish_run(
                     session,
                     run_id=run_id,
@@ -212,6 +226,100 @@ class ConnectorScheduler:
                     message=str(exc),
                     payload={"exception": type(exc).__name__},
                 )
+
+    async def _auto_ingest_reference_event(
+        self,
+        *,
+        run_id: UUID,
+        source_name: str,
+        status: str,
+        version: str,
+        checksum: str,
+        fetched_records: int,
+        upserted_records: int,
+    ) -> dict[str, object]:
+        if not settings.connector_auto_ingest_on_reference_update:
+            return {}
+        if status not in {"success", "partial", "noop"}:
+            return {}
+
+        tenant_id = settings.connector_auto_ingest_tenant_id.strip()
+        if not tenant_id:
+            return {"auto_ingest_status": "skipped", "auto_ingest_reason": "missing_connector_auto_ingest_tenant_id"}
+
+        event_id = str(uuid4())
+        event_time = datetime.now(tz=UTC).isoformat()
+        idempotency_key = f"connector-auto-{source_name}-{run_id}"
+        amount = float(max(1, fetched_records + max(0, upserted_records)))
+
+        token = create_access_token(
+            subject=settings.connector_auto_ingest_subject,
+            secret_key=settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+            expires_minutes=5,
+            tenant_id=tenant_id,
+            roles=["admin"],
+            scopes=["events:write", "events:read", "alerts:read", "alerts:write", "connectors:read"],
+        )
+
+        payload = {
+            "event_id": event_id,
+            "idempotency_key": idempotency_key,
+            "source": f"connector:{source_name}",
+            "event_type": "reference_update",
+            "transaction": {
+                "transaction_id": f"ref-{source_name}-{str(run_id)[:8]}",
+                "amount": amount,
+                "currency": "USD",
+                "source_country": "US",
+                "destination_country": "US",
+                "merchant_id": f"reference-{source_name}",
+                "merchant_category": "reference_data",
+                "metadata": {
+                    "source_name": source_name,
+                    "connector_status": status,
+                    "watchlist_version": version,
+                    "checksum": checksum,
+                    "fetched_records": fetched_records,
+                    "upserted_records": upserted_records,
+                    "run_id": str(run_id),
+                },
+            },
+            "occurred_at": event_time,
+        }
+
+        endpoint = f"{settings.api_gateway_url.rstrip('/')}/v2/events/ingest"
+        headers = {"Authorization": f"Bearer {token}"}
+
+        try:
+            async with httpx.AsyncClient(timeout=settings.connector_auto_ingest_timeout_seconds) as client:
+                response = await client.post(endpoint, json=payload, headers=headers)
+                response.raise_for_status()
+
+            body = response.json() if response.content else {}
+            queued = bool(body.get("queued")) if isinstance(body, dict) else False
+            ingest_status = str(body.get("status")) if isinstance(body, dict) and body.get("status") else "accepted"
+            ingested_event_id = (
+                str(body.get("event_id"))
+                if isinstance(body, dict) and body.get("event_id")
+                else event_id
+            )
+            return {
+                "auto_ingest_status": ingest_status,
+                "auto_ingest_queued": queued,
+                "auto_ingested_event_id": ingested_event_id,
+                "auto_ingest_tenant_id": tenant_id,
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "connector_auto_ingest_failed",
+                extra={"source": source_name, "run_id": str(run_id), "error": str(exc)},
+            )
+            return {
+                "auto_ingest_status": "failed",
+                "auto_ingest_error": str(exc)[:300],
+                "auto_ingest_tenant_id": tenant_id,
+            }
 
     async def _persist_result(self, session: AsyncSession, result: ConnectorResult) -> int:
         upserts = 0

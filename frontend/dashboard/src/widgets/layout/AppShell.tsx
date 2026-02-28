@@ -1,12 +1,13 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, LayoutDashboard, LogOut, Radar, Settings, ShieldAlert, ShieldCheck } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../app/state/auth-context';
 import { useLiveAlertState } from '../../app/state/live-alerts-context';
 import { useUI } from '../../app/state/ui-context';
 import { ingestSyntheticEvent } from '../../shared/api/alerts';
+import { fetchDataSourceRuns } from '../../shared/api/data-sources';
 import { TENANT_OPTIONS, WINDOW_OPTIONS } from '../../shared/lib/constants';
 import { Badge } from '../../shared/ui/badge';
 import { Button } from '../../shared/ui/button';
@@ -21,16 +22,90 @@ const NAV_ITEMS = [
   { to: '/settings', label: 'Settings', icon: Settings }
 ];
 
+type AutoIngestToast = {
+  id: string;
+  sourceName: string;
+  eventId: string;
+  status: string;
+};
+
 export function AppShell() {
   const { clearSession, token, username } = useAuth();
-  const { tenant, setTenant, window, setWindow } = useUI();
+  const { tenant, setTenant, window: selectedWindow, setWindow } = useUI();
   const { connected, stale, alerts } = useLiveAlertState();
   const [lastQueuedAck, setLastQueuedAck] = useState<{ eventId: string; queued: boolean; status: string } | null>(
     null
   );
+  const [autoIngestToasts, setAutoIngestToasts] = useState<AutoIngestToast[]>([]);
+  const seenConnectorRunsRef = useRef<Set<string>>(new Set());
+  const runsBootstrappedRef = useRef(false);
+  const toastTimersRef = useRef<Record<string, number>>({});
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const sourceRunsQuery = useQuery({
+    queryKey: ['auto-ingest-runs', tenant],
+    queryFn: async () => fetchDataSourceRuns(token!, 20),
+    enabled: Boolean(token),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: true
+  });
+
+  useEffect(() => {
+    if (token) {
+      return;
+    }
+    runsBootstrappedRef.current = false;
+    seenConnectorRunsRef.current.clear();
+    setAutoIngestToasts([]);
+  }, [token]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(toastTimersRef.current).forEach((timer) => window.clearTimeout(timer));
+      toastTimersRef.current = {};
+    };
+  }, []);
+
+  useEffect(() => {
+    const runs = sourceRunsQuery.data;
+    if (!runs || runs.length === 0) {
+      return;
+    }
+
+    if (!runsBootstrappedRef.current) {
+      runs.forEach((run) => seenConnectorRunsRef.current.add(run.run_id));
+      runsBootstrappedRef.current = true;
+      return;
+    }
+
+    for (const run of runs) {
+      if (seenConnectorRunsRef.current.has(run.run_id)) {
+        continue;
+      }
+      seenConnectorRunsRef.current.add(run.run_id);
+
+      const autoStatus = typeof run.details.auto_ingest_status === 'string' ? run.details.auto_ingest_status : '';
+      const autoEventId =
+        typeof run.details.auto_ingested_event_id === 'string' ? run.details.auto_ingested_event_id : '';
+      if (!autoEventId || !['accepted', 'queued'].includes(autoStatus)) {
+        continue;
+      }
+
+      const toast: AutoIngestToast = {
+        id: run.run_id,
+        sourceName: run.source_name,
+        eventId: autoEventId,
+        status: autoStatus
+      };
+      setAutoIngestToasts((current) => [toast, ...current].slice(0, 6));
+      toastTimersRef.current[toast.id] = window.setTimeout(() => {
+        setAutoIngestToasts((current) => current.filter((item) => item.id !== toast.id));
+        delete toastTimersRef.current[toast.id];
+      }, 7000);
+    }
+  }, [sourceRunsQuery.data]);
 
   const ingestMutation = useMutation({
     mutationFn: async () => {
@@ -104,7 +179,7 @@ export function AppShell() {
               ))}
             </Select>
 
-            <Select value={window} onChange={(event) => setWindow(event.target.value as typeof window)}>
+            <Select value={selectedWindow} onChange={(event) => setWindow(event.target.value as typeof selectedWindow)}>
               {WINDOW_OPTIONS.map((item) => (
                 <option key={item} value={item}>
                   {item}
@@ -145,6 +220,18 @@ export function AppShell() {
           <Outlet />
         </main>
       </div>
+      {autoIngestToasts.length > 0 && (
+        <div className="toast-stack" role="status" aria-live="polite">
+          {autoIngestToasts.map((toast) => (
+            <article key={toast.id} className="toast-item">
+              <strong>Auto-ingested from {toast.sourceName}</strong>
+              <span>
+                {toast.status} <span className="mono">{toast.eventId}</span>
+              </span>
+            </article>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

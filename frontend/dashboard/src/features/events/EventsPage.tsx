@@ -3,6 +3,8 @@ import { useMemo, useState } from 'react';
 
 import { useAuth } from '../../app/state/auth-context';
 import { useUI } from '../../app/state/ui-context';
+import type { DataSourceStatus } from '../../entities/data-sources';
+import { fetchDataSourceRuns, fetchDataSourceStatus } from '../../shared/api/data-sources';
 import { fetchEventDetail, fetchEvents } from '../../shared/api/events';
 import { formatDateTime } from '../../shared/lib/time';
 import { Badge } from '../../shared/ui/badge';
@@ -19,6 +21,17 @@ const statusVariant: Record<string, 'neutral' | 'info' | 'warning' | 'critical' 
   failed: 'warning'
 };
 
+const connectorStatusVariant: Record<string, 'neutral' | 'info' | 'warning' | 'critical' | 'success'> = {
+  running: 'info',
+  success: 'success',
+  partial: 'warning',
+  noop: 'neutral',
+  failed: 'critical',
+  degraded: 'warning'
+};
+
+const KEY_GATED_OR_PAID_SOURCES = new Set(['maxmind_geolite2', 'opensanctions', 'hibp']);
+
 export function EventsPage() {
   const { token } = useAuth();
   const { tenant, timezone } = useUI();
@@ -30,6 +43,9 @@ export function EventsPage() {
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [history, setHistory] = useState<string[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [runsWindow, setRunsWindow] = useState<'24h' | '7d' | 'all'>('24h');
+  const [errorsOnly, setErrorsOnly] = useState(false);
+  const [showDisabledPaidSources, setShowDisabledPaidSources] = useState(false);
 
   const filters = useMemo(
     () => ({
@@ -57,9 +73,79 @@ export function EventsPage() {
     enabled: Boolean(token && selectedEventId)
   });
 
+  const sourceRunsQuery = useQuery({
+    queryKey: ['internet-source-runs'],
+    queryFn: async () => fetchDataSourceRuns(token!, 25),
+    enabled: Boolean(token),
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: true
+  });
+
+  const sourceStatusQuery = useQuery({
+    queryKey: ['internet-source-status'],
+    queryFn: async () => fetchDataSourceStatus(token!),
+    enabled: Boolean(token),
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: true
+  });
+
   const rows = (eventsQuery.data?.items ?? []).filter((item) =>
     eventIdSearch ? item.event_id.toLowerCase().includes(eventIdSearch.toLowerCase()) : true
   );
+
+  const sourceStatusMap = useMemo(() => {
+    const map = new Map<string, DataSourceStatus>();
+    for (const statusItem of sourceStatusQuery.data ?? []) {
+      map.set(statusItem.source_name, statusItem);
+    }
+    return map;
+  }, [sourceStatusQuery.data]);
+
+  const filteredSourceRuns = useMemo(() => {
+    const now = Date.now();
+    const horizonMs =
+      runsWindow === '24h' ? 24 * 60 * 60 * 1000 : runsWindow === '7d' ? 7 * 24 * 60 * 60 * 1000 : null;
+
+    return (sourceRunsQuery.data ?? []).filter((run) => {
+      if (horizonMs != null) {
+        const startedAtMs = Date.parse(run.started_at);
+        if (Number.isFinite(startedAtMs) && now - startedAtMs > horizonMs) {
+          return false;
+        }
+      }
+
+      if (errorsOnly && !['failed', 'degraded'].includes(run.status)) {
+        return false;
+      }
+
+      if (!showDisabledPaidSources) {
+        const sourceState = sourceStatusMap.get(run.source_name);
+        if (sourceState && !sourceState.enabled) {
+          return false;
+        }
+        if (KEY_GATED_OR_PAID_SOURCES.has(run.source_name)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [errorsOnly, runsWindow, showDisabledPaidSources, sourceRunsQuery.data, sourceStatusMap]);
+
+  const freshnessBreachSources = useMemo(() => {
+    const set = new Set<string>();
+    for (const sourceState of sourceStatusQuery.data ?? []) {
+      if (
+        typeof sourceState.freshness_seconds === 'number' &&
+        typeof sourceState.freshness_slo_seconds === 'number' &&
+        sourceState.freshness_slo_seconds > 0 &&
+        sourceState.freshness_seconds > sourceState.freshness_slo_seconds
+      ) {
+        set.add(sourceState.source_name);
+      }
+    }
+    return set;
+  }, [sourceStatusQuery.data]);
 
   return (
     <section className="stack-lg">
@@ -143,6 +229,83 @@ export function EventsPage() {
               Next
             </Button>
           </div>
+        </div>
+      </Card>
+
+      <Card>
+        <div className="panel-header">
+          <h3>Internet source update stream</h3>
+          <Badge variant="info">reference_data.updated</Badge>
+        </div>
+        <p className="muted">
+          Internet feeds do not create transaction events directly. They update reference intelligence used during
+          scoring.
+        </p>
+        {sourceRunsQuery.isError && (
+          <p className="inline-warning">
+            Unable to load source run stream. Sign in with a tenant-scoped token that includes `connectors:read`.
+          </p>
+        )}
+
+        <div className="filters-grid">
+          <Select value={runsWindow} onChange={(event) => setRunsWindow(event.target.value as typeof runsWindow)}>
+            <option value="24h">last 24h</option>
+            <option value="7d">last 7d</option>
+            <option value="all">all history</option>
+          </Select>
+          <Button variant={errorsOnly ? 'primary' : 'secondary'} onClick={() => setErrorsOnly((current) => !current)}>
+            {errorsOnly ? 'errors only' : 'all statuses'}
+          </Button>
+          <Button
+            variant={showDisabledPaidSources ? 'primary' : 'secondary'}
+            onClick={() => setShowDisabledPaidSources((current) => !current)}
+          >
+            {showDisabledPaidSources ? 'showing disabled/paid' : 'hide disabled/paid'}
+          </Button>
+        </div>
+
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Source</th>
+                <th>Status</th>
+                <th>Fetched</th>
+                <th>Upserted</th>
+                <th>Started</th>
+                <th>Finished</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredSourceRuns.map((run) => (
+                <tr key={run.run_id}>
+                  <td className="mono">
+                    {run.source_name}
+                    {freshnessBreachSources.has(run.source_name) && (
+                      <>
+                        {' '}
+                        <Badge variant="warning">freshness breach</Badge>
+                      </>
+                    )}
+                  </td>
+                  <td>
+                    <Badge variant={connectorStatusVariant[run.status] ?? 'neutral'}>{run.status}</Badge>
+                  </td>
+                  <td>{run.fetched_records}</td>
+                  <td>{run.upserted_records}</td>
+                  <td>{formatDateTime(run.started_at, timezone)}</td>
+                  <td>{run.finished_at ? formatDateTime(run.finished_at, timezone) : 'running'}</td>
+                </tr>
+              ))}
+              {filteredSourceRuns.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="muted">
+                    No source runs match current filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </Card>
 

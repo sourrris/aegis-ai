@@ -90,6 +90,10 @@ class BaseServiceSettings(BaseSettings):
     ml_inference_url: str = "http://ml-inference:8000"
     feature_enrichment_url: str = "http://feature-enrichment:8000"
     data_connector_url: str = "http://data-connector:8030"
+    api_gateway_url: str = Field(
+        default="http://api-gateway:8000",
+        validation_alias=AliasChoices("API_GATEWAY_URL", "api_gateway_url"),
+    )
     max_event_retries: int = 3
     dedupe_ttl_seconds: int = 3600
     connector_poll_seconds: int = 60
@@ -99,6 +103,10 @@ class BaseServiceSettings(BaseSettings):
     connector_backoff_max_seconds: int = 1800
     connector_circuit_breaker_failures: int = 5
     connector_jitter_seconds: int = 15
+    connector_auto_ingest_on_reference_update: bool = True
+    connector_auto_ingest_tenant_id: str = "tenant-alpha"
+    connector_auto_ingest_subject: str = "connector-service"
+    connector_auto_ingest_timeout_seconds: int = 10
 
     # Data connector source configuration.
     ofac_sls_url: str = "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.CSV"
