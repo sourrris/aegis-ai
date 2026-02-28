@@ -107,8 +107,8 @@ export function ModelsPage() {
                 <tr key={`${item.model_name}:${item.model_version}`}>
                   <td>{item.model_name}</td>
                   <td className="mono">{item.model_version}</td>
-                  <td>{item.threshold.toFixed(4)}</td>
-                  <td>{(item.anomaly_rate * 100).toFixed(2)}%</td>
+                  <td>{item.threshold != null ? item.threshold.toFixed(4) : "-"}</td>
+                  <td>{item.anomaly_rate != null ? `${(item.anomaly_rate * 100).toFixed(2)}%` : "-"}</td>
                   <td>{item.inference_count}</td>
                   <td>{item.updated_at ? formatDateTime(item.updated_at, 'local') : '-'}</td>
                   <td>

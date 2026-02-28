@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { AlertsPage } from '../../features/alerts/AlertsPage';
 import { EventsPage } from '../../features/events/EventsPage';
+import { AuthCallbackPage } from '../../features/auth/AuthCallbackPage';
 import { LoginPage } from '../../features/auth/LoginPage';
 import { ModelsPage } from '../../features/models/ModelsPage';
 import { OverviewPage } from '../../features/overview/OverviewPage';
@@ -13,6 +14,7 @@ export function AppRouter() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/auth/callback" element={<AuthCallbackPage />} />
 
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>

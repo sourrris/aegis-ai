@@ -103,3 +103,40 @@ docker compose up -d --build
 - Retry + dead-letter queue handling
 - Structured JSON logging
 - Health checks for orchestration
+
+## CI Baseline (PR1)
+- GitHub Actions workflow: `.github/workflows/ci.yml`
+- Backend checks: Ruff lint, mypy smoke type-check, pytest smoke tests
+- Frontend checks: Vitest + TypeScript build
+- Container sanity: Docker build matrix for all service Dockerfiles
+
+Dependency and security posture notes are tracked in `docs/audit/pr1-audit-ci-baseline.md`.
+
+## Backend Env Var Compatibility
+Backend services now accept standardized env names in addition to legacy names:
+- `DATABASE_URL` (maps to Postgres DSN)
+- `REDIS_URL`
+- `RABBITMQ_URL`
+- `JWT_SECRET`
+
+This keeps rollout backward-compatible while we migrate to production secret conventions.
+
+
+## Production Upgrade Plan
+A detailed incremental hardening roadmap is tracked in `docs/production-upgrade-plan.md`.
+
+Recent hardening updates include:
+- Backward-compatible env standardization support (`DATABASE_URL`, `REDIS_URL`, `RABBITMQ_URL`, `JWT_SECRET`).
+- Auth password verification with opportunistic hash upgrades toward argon2.
+- Secure default admin seed hash generation using PostgreSQL `pgcrypto` (`crypt` + `gen_salt`).
+
+
+## Social Sign-In (Google / Apple)
+The API gateway now exposes OAuth start/callback endpoints for social login:
+- `GET /v1/auth/google/login`
+- `GET /v1/auth/apple/login`
+
+Set OAuth credentials in `.env`:
+- `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI`
+- `APPLE_OAUTH_CLIENT_ID`, `APPLE_OAUTH_CLIENT_SECRET`, `APPLE_OAUTH_REDIRECT_URI`
+- `FRONTEND_BASE_URL` (used for post-login redirect to `/auth/callback`)

@@ -4,6 +4,7 @@ import { Navigate } from 'react-router-dom';
 
 import { useAuth } from '../../app/state/auth-context';
 import { login } from '../../shared/api/auth';
+import { API_BASE_URL } from '../../shared/lib/constants';
 import { Button } from '../../shared/ui/button';
 import { Card } from '../../shared/ui/card';
 import { Input } from '../../shared/ui/input';
@@ -41,6 +42,14 @@ export function LoginPage() {
 
         <Button variant="primary" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
           {mutation.isPending ? 'Signing in...' : 'Sign in'}
+        </Button>
+
+        <Button variant="secondary" onClick={() => window.location.assign(`${API_BASE_URL}/v1/auth/google/login`)}>
+          Sign in with Google
+        </Button>
+
+        <Button variant="secondary" onClick={() => window.location.assign(`${API_BASE_URL}/v1/auth/apple/login`)}>
+          Sign in with Apple
         </Button>
 
         {mutation.isError && <p className="inline-error">Authentication failed. Check credentials.</p>}

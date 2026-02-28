@@ -48,5 +48,5 @@ CREATE INDEX IF NOT EXISTS idx_anomaly_results_processed_at ON anomaly_results (
 CREATE INDEX IF NOT EXISTS idx_model_registry_active ON model_registry (active);
 
 INSERT INTO users (username, password_hash, role)
-VALUES ('admin', 'admin123', 'admin')
+VALUES ('admin', crypt('admin123', gen_salt('bf')), 'admin')
 ON CONFLICT (username) DO NOTHING;
