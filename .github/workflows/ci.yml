@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, work, "upgrade/**"]
+
+jobs:
+  backend-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e backend/libs/common
+          python -m pip install -r backend/services/api_gateway/requirements.txt
+          python -m pip install -r backend/requirements-dev.txt
+      - name: Lint (ruff)
+        run: ruff check backend/tests
+      - name: Type check (mypy smoke scope)
+        run: mypy backend/tests
+      - name: Test (pytest)
+        run: pytest -q
+
+  frontend-quality:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install deps
+        run: npm install
+      - name: Run tests
+        run: npm test
+      - name: Typecheck + build
+        run: npm run build
+
+  container-build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dockerfile:
+          - backend/services/api_gateway/Dockerfile
+          - backend/services/event_worker/Dockerfile
+          - backend/services/ml_inference/Dockerfile
+          - backend/services/notification_service/Dockerfile
+          - frontend/dashboard/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -f ${{ matrix.dockerfile }} .

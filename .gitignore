@@ -1,5 +1,70 @@
+# ----------------------------
+# Environment files
+# ----------------------------
 .env
+.env.local
+.env.*.local
+frontend/dashboard/.env.local
+
+# ----------------------------
+# Python
+# ----------------------------
+.venv/
+venv/
+env/
+ENV/
 **/__pycache__/
-**/*.pyc
+**/*.py[cod]
+**/*.pyo
+**/*.pyd
+*.so
+*.dylib
+*.egg
+*.egg-info/
+**/*.egg-info/
+.python-version
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.pyre/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+pip-wheel-metadata/
+
+# ----------------------------
+# Node / Frontend
+# ----------------------------
 **/node_modules/
+frontend/dashboard/.vite/
+frontend/dashboard/dist/
+frontend/dashboard/coverage/
+frontend/dashboard/package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ----------------------------
+# Local runtime artifacts
+# ----------------------------
+.local/
+*.log
+*.pid
+*.pid.lock
+
+# ----------------------------
+# IDE / Editor / OS
+# ----------------------------
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
 .DS_Store
+Thumbs.db

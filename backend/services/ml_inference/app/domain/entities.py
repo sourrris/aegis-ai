@@ -1,6 +1,5 @@
 from dataclasses import dataclass
-
-import tensorflow as tf
+from typing import Any
 
 from risk_common.schemas import ModelMetadata
 
@@ -8,4 +7,5 @@ from risk_common.schemas import ModelMetadata
 @dataclass
 class LoadedModel:
     metadata: ModelMetadata
-    model: tf.keras.Model
+    # Stored model instance; type is backend-specific (e.g. TensorFlow model or lightweight numpy-based state).
+    model: Any

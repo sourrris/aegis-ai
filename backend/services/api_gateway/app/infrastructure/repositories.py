@@ -1,33 +1,79 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
 from passlib.context import CryptContext
+from risk_common.schemas import EventEnvelope
 from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.models import Event, User
-from risk_common.schemas import EventEnvelope
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
 
 
 class UserRepository:
     @staticmethod
+    def verify_password_and_upgrade_hash(password: str, stored_hash: str) -> tuple[bool, str | None]:
+        """Validate password against stored credentials and return optional upgraded hash.
+
+        Supports legacy plaintext credentials for backward compatibility, returning
+        an argon2 hash upgrade when legacy format is encountered.
+        """
+        identified_scheme = pwd_context.identify(stored_hash)
+
+        if identified_scheme is None:
+            if stored_hash != password:
+                return False, None
+            return True, pwd_context.hash(password)
+
+        if not pwd_context.verify(password, stored_hash):
+            return False, None
+
+        if pwd_context.needs_update(stored_hash):
+            return True, pwd_context.hash(password)
+
+        return True, None
+
+    @staticmethod
     async def authenticate(session: AsyncSession, username: str, password: str) -> User | None:
+        """Authenticate a user and opportunistically upgrade password hash format."""
         result = await session.execute(select(User).where(User.username == username))
         user = result.scalar_one_or_none()
         if not user:
             return None
 
-        # Allow plaintext seeds in local/dev while keeping bcrypt support for production.
-        if user.password_hash.startswith("$2"):
-            if not pwd_context.verify(password, user.password_hash):
-                return None
-        elif user.password_hash != password:
+        is_valid, upgraded_hash = UserRepository.verify_password_and_upgrade_hash(password, user.password_hash)
+        if not is_valid:
             return None
+
+        if upgraded_hash:
+            user.password_hash = upgraded_hash
+            await session.commit()
+
         return user
 
+
+
+    @staticmethod
+    async def get_by_username(session: AsyncSession, username: str) -> User | None:
+        """Fetch a user by username."""
+        result = await session.execute(select(User).where(User.username == username))
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_or_create_social_user(session: AsyncSession, username: str) -> User:
+        """Get or create a user account for social sign-in identity."""
+        existing_user = await UserRepository.get_by_username(session, username)
+        if existing_user:
+            return existing_user
+
+        social_password_hash = pwd_context.hash(f"social-login:{username}:{datetime.now(UTC).timestamp()}")
+        user = User(username=username, password_hash=social_password_hash, role="analyst")
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        return user
 
 class EventRepository:
     @staticmethod
@@ -334,22 +380,23 @@ class MonitoringRepository:
             params["severity"] = severity
 
         where_sql = " AND ".join(where_clauses)
+
         rows = await session.execute(
             text(
                 f"""
                 SELECT
-                    CONCAT('ar_', ar.id) AS alert_id,
                     ar.id AS numeric_alert_id,
                     ar.event_id,
                     e.tenant_id,
-                    e.event_type,
                     e.source,
+                    e.event_type,
                     {MonitoringRepository.SEVERITY_SQL} AS severity,
                     ar.model_name,
                     ar.model_version,
                     ar.anomaly_score,
                     ar.threshold,
-                    ar.processed_at AS created_at
+                    ar.processed_at AS created_at,
+                    CONCAT(ar.event_id::text, '-', ar.id::text) AS alert_id
                 FROM anomaly_results ar
                 JOIN events e ON e.event_id = ar.event_id
                 WHERE {where_sql}
@@ -360,10 +407,11 @@ class MonitoringRepository:
             ),
             params,
         )
+
         total = await session.execute(
             text(
                 f"""
-                SELECT COUNT(*)
+                SELECT COUNT(*) AS total
                 FROM anomaly_results ar
                 JOIN events e ON e.event_id = ar.event_id
                 WHERE {where_sql}
@@ -378,20 +426,25 @@ class MonitoringRepository:
 
     @staticmethod
     async def fetch_alert_detail(session: AsyncSession, alert_id: str) -> dict | None:
-        normalized = alert_id.replace("ar_", "")
-        if not normalized.isdigit():
+        if "-" not in alert_id:
+            return None
+        base_event_id, numeric_id = alert_id.rsplit("-", 1)
+
+        try:
+            UUID(base_event_id)
+            numeric_alert_id = int(numeric_id)
+        except (ValueError, TypeError):
             return None
 
         row = await session.execute(
             text(
                 f"""
                 SELECT
-                    CONCAT('ar_', ar.id) AS alert_id,
                     ar.id AS numeric_alert_id,
                     ar.event_id,
                     e.tenant_id,
-                    e.event_type,
                     e.source,
+                    e.event_type,
                     {MonitoringRepository.SEVERITY_SQL} AS severity,
                     ar.model_name,
                     ar.model_version,
@@ -400,19 +453,22 @@ class MonitoringRepository:
                     ar.is_anomaly,
                     ar.processed_at AS created_at,
                     e.payload AS event_payload,
-                    e.status AS event_status,
-                    e.occurred_at
+                    CONCAT(ar.event_id::text, '-', ar.id::text) AS alert_id
                 FROM anomaly_results ar
                 JOIN events e ON e.event_id = ar.event_id
-                WHERE ar.id = :alert_id
+                WHERE ar.id = :numeric_alert_id
+                  AND ar.event_id = :event_id
+                LIMIT 1
                 """
             ),
-            {"alert_id": int(normalized)},
+            {"numeric_alert_id": numeric_alert_id, "event_id": base_event_id},
         )
-        item = row.first()
-        if not item:
+
+        result = row.first()
+        if not result:
             return None
-        return dict(item._mapping)
+
+        return dict(result._mapping)
 
 
 class ModelRepository:
