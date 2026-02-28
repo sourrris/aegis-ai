@@ -98,24 +98,31 @@ class OfacConnector(BaseConnector):
             "User-Agent": "AegisRiskConnector/2.1 (compliance@aegis.local)",
         }
         async with httpx.AsyncClient(timeout=settings.connector_http_timeout_seconds) as client:
-            response = await request_with_retry(client, "GET", settings.ofac_sls_url, headers=headers)
+            response = await request_with_retry(
+                client,
+                "GET",
+                settings.ofac_sls_url,
+                headers=headers,
+                follow_redirects=True,
+            )
             response.raise_for_status()
 
         body = response.text
-        reader = csv.DictReader(io.StringIO(body))
+        reader = csv.reader(io.StringIO(body))
         names: list[str] = []
+        seen: set[str] = set()
         for row in reader:
-            candidate = (
-                row.get("name")
-                or row.get("sdn_name")
-                or row.get("Name")
-                or row.get("SDN_Name")
-                or row.get("Entity Name")
-                or ""
-            )
-            normalized = str(candidate).strip()
+            if not row:
+                continue
+            candidate = row[1] if len(row) > 1 else row[0]
+            normalized = str(candidate).strip().strip('"')
+            if normalized.lower() in {"name", "sdn_name", "sdn name", "entity name"}:
+                continue
             if normalized:
-                names.append(normalized[:200])
+                clipped = normalized[:200]
+                if clipped not in seen:
+                    seen.add(clipped)
+                    names.append(clipped)
 
         checksum = self._checksum(body)
         version = response.headers.get("etag") or response.headers.get("last-modified") or self._now_version()
@@ -182,8 +189,18 @@ class FatfConnector(BaseConnector):
     config_enabled = settings.connector_enable_fatf
 
     async def fetch(self, runtime_state: dict | None = None) -> ConnectorResult:
+        headers = {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "User-Agent": "Mozilla/5.0 (compatible; AegisRiskConnector/2.1; +https://localhost)",
+        }
         async with httpx.AsyncClient(timeout=settings.connector_http_timeout_seconds) as client:
-            response = await request_with_retry(client, "GET", settings.fatf_source_url)
+            response = await request_with_retry(
+                client,
+                "GET",
+                settings.fatf_source_url,
+                headers=headers,
+                follow_redirects=True,
+            )
             response.raise_for_status()
 
         body = response.text

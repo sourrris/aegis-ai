@@ -31,6 +31,7 @@ APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys"
 class LoginRequest(BaseModel):
     username: str
     password: str
+    tenant_id: str | None = None
 
 
 class OAuthStatePayload(BaseModel):
@@ -104,12 +105,16 @@ async def _finish_social_login(session: AsyncSession, provider: str, claims: dic
 
     username = email or f"{provider}:{social_subject}"
     user = await UserRepository.get_or_create_social_user(session=session, username=username)
+    context = await UserRepository.resolve_tenant_context(session, user, None)
 
     token = create_access_token(
         subject=user.username,
         secret_key=settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm,
         expires_minutes=settings.jwt_access_token_minutes,
+        tenant_id=context["tenant_id"],
+        roles=context["roles"],
+        scopes=context["scopes"],
     )
 
     redirect_query = urlencode({"token": token, "username": user.username})
@@ -125,11 +130,15 @@ async def issue_token(
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Bad credentials")
 
+    context = await UserRepository.resolve_tenant_context(session, user, payload.tenant_id)
     token = create_access_token(
         subject=user.username,
         secret_key=settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm,
         expires_minutes=settings.jwt_access_token_minutes,
+        tenant_id=context["tenant_id"],
+        roles=context["roles"],
+        scopes=context["scopes"],
     )
     return TokenResponse(access_token=token)
 

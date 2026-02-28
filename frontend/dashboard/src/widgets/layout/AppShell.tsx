@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bell, LayoutDashboard, LogOut, Radar, Settings, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../app/state/auth-context';
@@ -24,6 +25,9 @@ export function AppShell() {
   const { clearSession, token, username } = useAuth();
   const { tenant, setTenant, window, setWindow } = useUI();
   const { connected, stale, alerts } = useLiveAlertState();
+  const [lastQueuedAck, setLastQueuedAck] = useState<{ eventId: string; queued: boolean; status: string } | null>(
+    null
+  );
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
@@ -35,7 +39,12 @@ export function AppShell() {
       }
       return ingestSyntheticEvent(token, tenant);
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      setLastQueuedAck({
+        eventId: result.event_id,
+        queued: result.queued,
+        status: result.status
+      });
       queryClient.invalidateQueries({ queryKey: ['overview-metrics'] });
       queryClient.invalidateQueries({ queryKey: ['alerts'] });
       queryClient.invalidateQueries({ queryKey: ['events'] });
@@ -115,6 +124,12 @@ export function AppShell() {
         </header>
 
         {ingestMutation.isError && <p className="inline-error">Failed to ingest synthetic event.</p>}
+        {lastQueuedAck && (
+          <p className="inline-success">
+            Event queued: {String(lastQueuedAck.queued)} | status: {lastQueuedAck.status} | id:{' '}
+            <span className="mono">{lastQueuedAck.eventId}</span>
+          </p>
+        )}
         {!connected && <p className="inline-warning">Live stream disconnected. Reconnect is running in background.</p>}
 
         {alerts.length > 0 && (

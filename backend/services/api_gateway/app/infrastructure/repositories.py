@@ -87,18 +87,25 @@ class UserRepository:
         user: User,
         requested_tenant_id: str | None = None,
     ) -> dict:
+        where_sql = "WHERE utr.user_id = :user_id"
+        params: dict[str, object] = {"user_id": user.id}
+        if requested_tenant_id:
+            where_sql += " AND utr.tenant_id = :tenant_id"
+            params["tenant_id"] = requested_tenant_id
+
         rows = await session.execute(
             text(
                 """
                 SELECT utr.tenant_id, utr.role_name, COALESCE(r.scopes, ARRAY[]::text[]) AS scopes
                 FROM user_tenant_roles utr
                 LEFT JOIN roles r ON r.role_name = utr.role_name
-                WHERE utr.user_id = :user_id
-                  AND (:tenant_id IS NULL OR utr.tenant_id = :tenant_id)
+                """
+                + where_sql
+                + """
                 ORDER BY utr.tenant_id ASC, utr.role_name ASC
                 """
             ),
-            {"user_id": user.id, "tenant_id": requested_tenant_id},
+            params,
         )
         mappings = [dict(item._mapping) for item in rows]
         if mappings:

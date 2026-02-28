@@ -117,7 +117,7 @@ class BaseServiceSettings(BaseSettings):
     connector_enable_ofac: bool = True
     connector_enable_fatf: bool = True
     connector_enable_ecb: bool = True
-    connector_enable_maxmind: bool = True
+    connector_enable_maxmind: bool = False
     connector_enable_opensanctions: bool = False
     connector_enable_ipinfo: bool = False
     connector_enable_binlist: bool = False

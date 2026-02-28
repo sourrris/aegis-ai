@@ -71,24 +71,26 @@ class ConnectorScheduler:
             await self.run_once()
             await asyncio.sleep(max(10, settings.connector_poll_seconds))
 
-    async def run_once(self, source_name: str | None = None) -> None:
+    async def run_once(self, source_name: str | None = None, *, force: bool = False) -> None:
         if not settings.connectors_v2_enabled:
             return
         connectors = [self.connector_map[source_name]] if source_name and source_name in self.connector_map else self.connectors
         for connector in connectors:
             try:
-                if await self._should_run(connector.source_name):
+                if await self._should_run(connector.source_name, force=force):
                     await self._run_connector(connector)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("connector_scheduler_iteration_failed", extra={"source": connector.source_name, "error": str(exc)})
 
-    async def _should_run(self, source_name: str) -> bool:
+    async def _should_run(self, source_name: str, *, force: bool = False) -> bool:
         async with SessionLocal() as session:
             runtime = await ConnectorRepository.source_runtime(session, source_name)
         if not runtime:
             return False
         if not bool(runtime.get("source_enabled", False)) or not bool(runtime.get("state_enabled", False)):
             return False
+        if force:
+            return True
 
         now = datetime.now(tz=UTC)
         backoff_until = runtime.get("backoff_until")

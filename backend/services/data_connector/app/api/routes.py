@@ -44,7 +44,7 @@ async def run_connectors_now(
     scheduler = request.app.state.scheduler
     if source_name and source_name not in scheduler.connector_map:
         raise HTTPException(status_code=404, detail=f"Unknown source: {source_name}")
-    await scheduler.run_once(source_name=source_name)
+    await scheduler.run_once(source_name=source_name, force=True)
     return {"status": "ok", "triggered": True, "source_name": source_name}
 
 

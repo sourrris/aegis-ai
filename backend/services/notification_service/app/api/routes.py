@@ -13,6 +13,24 @@ def _manager(websocket: WebSocket) -> ConnectionManager:
     return websocket.app.state.connection_manager
 
 
+def _tenant_from_payload_or_query(payload: dict | None, websocket: WebSocket) -> str | None:
+    tenant = payload.get("tenant_id") if isinstance(payload, dict) else None
+    if tenant and isinstance(tenant, str):
+        return tenant
+
+    requested = websocket.query_params.get("tenant_id")
+    if requested:
+        requested = requested.strip()
+        if requested and requested != "all":
+            return requested
+    return None
+
+
+def _is_heartbeat_ping(message: str) -> bool:
+    normalized = message.strip().lower()
+    return normalized == "ping" or normalized == '{"type":"ping"}'
+
+
 @router.websocket("/ws/alerts")
 async def alerts_stream(websocket: WebSocket) -> None:
     token = websocket.query_params.get("token")
@@ -23,7 +41,7 @@ async def alerts_stream(websocket: WebSocket) -> None:
     if payload is None:
         await websocket.close(code=1008)
         return
-    tenant_id = payload.get("tenant_id")
+    tenant_id = _tenant_from_payload_or_query(payload, websocket)
     if not tenant_id:
         await websocket.close(code=1008)
         return
@@ -32,7 +50,9 @@ async def alerts_stream(websocket: WebSocket) -> None:
     await manager.connect(websocket, tenant_id=str(tenant_id), channels=["alerts"])
     try:
         while True:
-            await websocket.receive_text()
+            message = await websocket.receive_text()
+            if _is_heartbeat_ping(message):
+                await websocket.send_text("pong")
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
@@ -47,7 +67,7 @@ async def multiplexed_stream(websocket: WebSocket) -> None:
     if payload is None:
         await websocket.close(code=1008)
         return
-    tenant_id = payload.get("tenant_id")
+    tenant_id = _tenant_from_payload_or_query(payload, websocket)
     if not tenant_id:
         await websocket.close(code=1008)
         return
@@ -62,7 +82,9 @@ async def multiplexed_stream(websocket: WebSocket) -> None:
     await manager.connect(websocket, tenant_id=str(tenant_id), channels=channels)
     try:
         while True:
-            await websocket.receive_text()
+            message = await websocket.receive_text()
+            if _is_heartbeat_ping(message):
+                await websocket.send_text("pong")
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 

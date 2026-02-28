@@ -5,11 +5,12 @@ import { liveMetricSchema, type LiveMetric } from '../../entities/metrics';
 import { normalizeLiveAlert, wsEnvelopeSchema } from '../../entities/websocket';
 import { WS_BASE_URL } from '../lib/constants';
 
-function toWsUrl(base: string, token: string) {
-  return `${base.replace(/^http/, 'ws')}/ws/stream?channels=alerts,metrics&token=${encodeURIComponent(token)}`;
+function toWsUrl(base: string, token: string, tenant: string) {
+  const resolvedTenant = tenant === 'all' ? 'tenant-alpha' : tenant;
+  return `${base.replace(/^http/, 'ws')}/ws/stream?channels=alerts,metrics&token=${encodeURIComponent(token)}&tenant_id=${encodeURIComponent(resolvedTenant)}`;
 }
 
-export function useLiveAlerts(token: string | null) {
+export function useLiveAlerts(token: string | null, tenant: string) {
   const [connected, setConnected] = useState(false);
   const [stale, setStale] = useState(false);
   const [alerts, setAlerts] = useState<AlertListItem[]>([]);
@@ -52,7 +53,7 @@ export function useLiveAlerts(token: string | null) {
         return;
       }
 
-      socket = new WebSocket(toWsUrl(WS_BASE_URL, token));
+      socket = new WebSocket(toWsUrl(WS_BASE_URL, token, tenant));
       socket.onopen = () => {
         if (!active || !socket) return;
         setConnected(true);
@@ -69,6 +70,9 @@ export function useLiveAlerts(token: string | null) {
       socket.onmessage = (event) => {
         if (!active) return;
         markFresh();
+        if (event.data === 'pong') {
+          return;
+        }
 
         try {
           const raw = JSON.parse(event.data);
@@ -124,7 +128,7 @@ export function useLiveAlerts(token: string | null) {
       clearTimers();
       socket?.close();
     };
-  }, [token]);
+  }, [token, tenant]);
 
   return useMemo(
     () => ({

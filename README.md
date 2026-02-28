@@ -143,6 +143,10 @@ Connector control endpoints:
 - `POST /v1/connectors/disable?source_name=...`
 - `GET /v1/connectors/lookup/ip?ip=...`
 - `GET /v1/connectors/lookup/bin?card_bin=...`
+
+Open-first default:
+- Paid/key-gated sources (`opensanctions`, `maxmind_geolite2`, `hibp`) are disabled by default.
+- Free/core sources (`ofac_sls`, `fatf`, `ecb_fx`) remain enabled.
 - `GET /v2/models/drift`
 - `GET /v2/models/training-runs`
 

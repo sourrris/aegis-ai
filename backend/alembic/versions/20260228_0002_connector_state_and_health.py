@@ -77,6 +77,7 @@ def upgrade() -> None:
             WHEN 'ipinfo' THEN FALSE
             WHEN 'binlist' THEN FALSE
             WHEN 'hibp' THEN FALSE
+            WHEN 'maxmind_geolite2' THEN FALSE
             ELSE enabled
         END
         """

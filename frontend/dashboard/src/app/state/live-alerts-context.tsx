@@ -4,6 +4,7 @@ import type { AlertListItem } from '../../entities/alerts';
 import type { LiveMetric } from '../../entities/metrics';
 import { useLiveAlerts } from '../../shared/hooks/useLiveAlerts';
 import { useAuth } from './auth-context';
+import { useUI } from './ui-context';
 
 type LiveAlertsState = {
   connected: boolean;
@@ -16,7 +17,8 @@ const LiveAlertsContext = createContext<LiveAlertsState | null>(null);
 
 export function LiveAlertsProvider({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
-  const live = useLiveAlerts(token);
+  const { tenant } = useUI();
+  const live = useLiveAlerts(token, tenant);
   return <LiveAlertsContext.Provider value={live}>{children}</LiveAlertsContext.Provider>;
 }
 
