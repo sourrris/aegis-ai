@@ -52,10 +52,18 @@ jobs:
 
       - name: Install backend dependencies
         run: |
+          set -euo pipefail
           python -m pip install --upgrade pip
           python -m pip install -e backend/libs/common
-          python -m pip install -r backend/services/api_gateway/requirements.txt
-          python -m pip install -r backend/services/event_worker/requirements.txt
+          requirement_files="$(find backend/services -type f -name requirements.txt | sort)"
+          if [ -z "${requirement_files}" ]; then
+            echo "No backend service requirements files found under backend/services"
+            exit 1
+          fi
+          while IFS= read -r requirement_file; do
+            echo "Installing ${requirement_file}"
+            python -m pip install -r "${requirement_file}"
+          done <<< "${requirement_files}"
           python -m pip install -r backend/requirements-dev.txt
 
       - name: Backend quality checks
@@ -93,17 +101,14 @@ jobs:
       - name: Build service images
         run: |
           set -euo pipefail
-          dockerfiles=(
-            backend/services/api_gateway/Dockerfile
-            backend/services/event_worker/Dockerfile
-            backend/services/ml_inference/Dockerfile
-            backend/services/notification_service/Dockerfile
-            backend/services/data_connector/Dockerfile
-            backend/services/metrics_aggregator/Dockerfile
-            backend/services/feature_enrichment/Dockerfile
-            frontend/dashboard/Dockerfile
-          )
-          for dockerfile in "${dockerfiles[@]}"; do
+          dockerfiles="$(find backend/services -type f -name Dockerfile | sort)"
+          if [ -z "${dockerfiles}" ]; then
+            echo "No backend service Dockerfiles found under backend/services"
+            exit 1
+          fi
+          while IFS= read -r dockerfile; do
             echo "Building image from ${dockerfile}"
             docker build -f "${dockerfile}" .
-          done
+          done <<< "${dockerfiles}"
+          echo "Building image from frontend/dashboard/Dockerfile"
+          docker build -f frontend/dashboard/Dockerfile .
