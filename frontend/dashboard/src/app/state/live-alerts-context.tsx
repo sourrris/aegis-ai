@@ -2,7 +2,7 @@ import { createContext, useContext } from 'react';
 
 import type { AlertListItem } from '../../entities/alerts';
 import type { LiveMetric } from '../../entities/metrics';
-import { useLiveAlerts } from '../../shared/hooks/useLiveAlerts';
+import { useRiskStream } from '../../shared/hooks/useRiskStream';
 import { useAuth } from './auth-context';
 import { useUI } from './ui-context';
 import type { useToast } from '../../shared/ui/toaster';
@@ -24,7 +24,7 @@ interface LiveAlertsProviderProps {
 export function LiveAlertsProvider({ children, toast }: LiveAlertsProviderProps) {
   const { token } = useAuth();
   const { tenant } = useUI();
-  const live = useLiveAlerts(token, tenant, toast);
+  const live = useRiskStream(token, tenant, toast);
   return <LiveAlertsContext.Provider value={live}>{children}</LiveAlertsContext.Provider>;
 }
 

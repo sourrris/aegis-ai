@@ -92,13 +92,13 @@ Use this when you want to continue working from any device in `chatgpt.com/codex
 set -euo pipefail
 python -m pip install --upgrade pip
 python -m pip install -e backend/libs/common
-python -m pip install -r backend/services/api_gateway/requirements.txt
-python -m pip install -r backend/services/event_worker/requirements.txt
-python -m pip install -r backend/services/ml_inference/requirements.txt
-python -m pip install -r backend/services/notification_service/requirements.txt
-python -m pip install -r backend/services/data_connector/requirements.txt
-python -m pip install -r backend/services/feature_enrichment/requirements.txt
-python -m pip install -r backend/services/metrics_aggregator/requirements.txt
+python -m pip install -r backend/services/risk/api/requirements.txt
+python -m pip install -r backend/services/risk/worker/requirements.txt
+python -m pip install -r backend/services/risk/ml/requirements.txt
+python -m pip install -r backend/services/risk/notification/requirements.txt
+python -m pip install -r backend/services/risk/connector/requirements.txt
+python -m pip install -r backend/services/risk/enrichment/requirements.txt
+python -m pip install -r backend/services/risk/metrics/requirements.txt
 npm ci --prefix frontend/dashboard
 ```
 
@@ -113,9 +113,9 @@ docker compose up -d --build
 - password: `admin123`
 
 ## Docs
-- Architecture and diagrams: `docs/architecture.md`
-- Folder structure: `docs/folder-structure.md`
-- V2 operationalization guide: `docs/v2-operationalization.md`
+- Architecture and diagrams: `docs/risk.architecture.md`
+- Folder structure: `docs/engineering.folder-structure.md`
+- V2 operationalization guide: `docs/risk.v2-operationalization.md`
 
 ## Key Production Patterns Included
 - Event-driven microservices via RabbitMQ
@@ -151,7 +151,7 @@ Connector control endpoints:
 - Frontend checks: Vitest + TypeScript build
 - Container sanity: Docker build matrix for all service Dockerfiles
 
-Dependency and security posture notes are tracked in `docs/audit/pr1-audit-ci-baseline.md`.
+Dependency and security posture notes are tracked in `docs/engineering.audit.pr1-ci-baseline.md`.
 
 ## Backend Env Var Compatibility
 Backend services now accept standardized env names in addition to legacy names:
@@ -164,7 +164,7 @@ This keeps rollout backward-compatible while we migrate to production secret con
 
 
 ## Production Upgrade Plan
-A detailed incremental hardening roadmap is tracked in `docs/production-upgrade-plan.md`.
+A detailed incremental hardening roadmap is tracked in `docs/engineering.production-upgrade-plan.md`.
 
 Recent hardening updates include:
 - Backward-compatible env standardization support (`DATABASE_URL`, `REDIS_URL`, `RABBITMQ_URL`, `JWT_SECRET`).

@@ -12,9 +12,9 @@ from aio_pika import DeliveryMode, Message
 
 async def replay(limit: int, dry_run: bool, queue_name: str) -> int:
     rabbitmq_url = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
-    events_exchange_name = os.getenv("RABBITMQ_EVENTS_EXCHANGE", "risk.events.exchange")
-    default_events_routing_key = os.getenv("RABBITMQ_EVENTS_ROUTING_KEY", "risk.events.ingested")
-    default_events_v2_routing_key = os.getenv("RABBITMQ_EVENTS_V2_ROUTING_KEY", "risk.events.v2.ingested")
+    events_exchange_name = os.getenv("RABBITMQ_EVENTS_EXCHANGE", "risk.event.exchange")
+    default_events_routing_key = os.getenv("RABBITMQ_EVENTS_ROUTING_KEY", "risk.event.ingested")
+    default_events_v2_routing_key = os.getenv("RABBITMQ_EVENTS_V2_ROUTING_KEY", "risk.event.v2.ingested")
 
     connection = await aio_pika.connect_robust(rabbitmq_url)
     try:
@@ -66,7 +66,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Replay messages from RabbitMQ DLQ to events exchange.")
     parser.add_argument("--limit", type=int, default=100, help="Maximum messages to replay")
     parser.add_argument("--dry-run", action="store_true", help="Acknowledge messages without publishing")
-    parser.add_argument("--queue", default=os.getenv("RABBITMQ_EVENTS_DLQ", "risk.events.dlq"), help="DLQ queue name")
+    parser.add_argument("--queue", default=os.getenv("RABBITMQ_EVENTS_DLQ", "risk.event.dlq"), help="DLQ queue name")
     return parser.parse_args()
 
 
