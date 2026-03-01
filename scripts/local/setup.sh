@@ -55,13 +55,13 @@ source "$ROOT_DIR/.venv/bin/activate"
 PIP="$ROOT_DIR/.venv/bin/pip"
 "$PIP" install --upgrade pip >/dev/null
 "$PIP" install -e "$ROOT_DIR/backend/libs/common" >/dev/null
-"$PIP" install -r "$ROOT_DIR/backend/services/api_gateway/requirements.txt" >/dev/null
-"$PIP" install -r "$ROOT_DIR/backend/services/event_worker/requirements.txt" >/dev/null
-"$PIP" install -r "$ROOT_DIR/backend/services/ml_inference/requirements.txt" >/dev/null
-"$PIP" install -r "$ROOT_DIR/backend/services/notification_service/requirements.txt" >/dev/null
-"$PIP" install -r "$ROOT_DIR/backend/services/data_connector/requirements.txt" >/dev/null
-"$PIP" install -r "$ROOT_DIR/backend/services/metrics_aggregator/requirements.txt" >/dev/null
-"$PIP" install -r "$ROOT_DIR/backend/services/feature_enrichment/requirements.txt" >/dev/null
+"$PIP" install -r "$ROOT_DIR/backend/services/risk/api/requirements.txt" >/dev/null
+"$PIP" install -r "$ROOT_DIR/backend/services/risk/worker/requirements.txt" >/dev/null
+"$PIP" install -r "$ROOT_DIR/backend/services/risk/ml/requirements.txt" >/dev/null
+"$PIP" install -r "$ROOT_DIR/backend/services/risk/notification/requirements.txt" >/dev/null
+"$PIP" install -r "$ROOT_DIR/backend/services/risk/connector/requirements.txt" >/dev/null
+"$PIP" install -r "$ROOT_DIR/backend/services/risk/metrics/requirements.txt" >/dev/null
+"$PIP" install -r "$ROOT_DIR/backend/services/risk/enrichment/requirements.txt" >/dev/null
 "$PIP" install alembic >/dev/null
 "$PIP" install greenlet >/dev/null
 

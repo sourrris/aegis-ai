@@ -41,6 +41,8 @@ start_backend() {
 
   local log_file="$LOG_DIR/${name}.log"
   local pid_file="$PID_DIR/${name}.pid"
+  : >"$log_file"
+  rm -f "$pid_file"
 
   (
     cd "$service_dir"
@@ -59,7 +61,7 @@ start_backend() {
       RABBITMQ_QUEUE_TYPE="$RABBITMQ_QUEUE_TYPE" \
       CORS_ALLOW_ORIGINS="$CORS_ALLOW_ORIGINS" \
       "$@" \
-      uvicorn app.main:app --host 0.0.0.0 --port "$port" >>"$log_file" 2>&1 &
+      uvicorn app.main:app --host 0.0.0.0 --port "$port" >"$log_file" 2>&1 &
     echo $! >"$pid_file"
   )
 }
@@ -67,13 +69,15 @@ start_backend() {
 start_frontend() {
   local log_file="$LOG_DIR/dashboard.log"
   local pid_file="$PID_DIR/dashboard.pid"
+  : >"$log_file"
+  rm -f "$pid_file"
 
   (
     cd "$ROOT_DIR/frontend/dashboard"
     nohup env \
       VITE_API_BASE_URL="${VITE_API_BASE_URL:-http://api.localhost}" \
       VITE_WS_BASE_URL="${VITE_WS_BASE_URL:-http://ws.localhost}" \
-      npm run dev >>"$log_file" 2>&1 &
+      npm run dev >"$log_file" 2>&1 &
     echo $! >"$pid_file"
   )
 }
@@ -119,28 +123,30 @@ ensure_frontend_dependencies() {
   fi
 }
 
-echo "Starting backend services..."
-start_backend "ml-inference" "$ROOT_DIR/backend/services/ml_inference" "8001" "MODEL_DIR=$MODEL_DIR"
-start_backend "feature-enrichment" "$ROOT_DIR/backend/services/feature_enrichment" "8040"
-start_backend "data-connector" "$ROOT_DIR/backend/services/data_connector" "8030"
-start_backend "metrics-aggregator" "$ROOT_DIR/backend/services/metrics_aggregator" "8050"
-start_backend "api-gateway" "$ROOT_DIR/backend/services/api_gateway" "8000"
-start_backend "event-worker" "$ROOT_DIR/backend/services/event_worker" "8010" "MAX_EVENT_RETRIES=3"
-start_backend "notification-service" "$ROOT_DIR/backend/services/notification_service" "8020"
+echo "Starting foundational backend services..."
+start_backend "ml-inference" "$ROOT_DIR/backend/services/risk/ml" "8001" "MODEL_DIR=$MODEL_DIR"
+start_backend "feature-enrichment" "$ROOT_DIR/backend/services/risk/enrichment" "8040"
+start_backend "metrics-aggregator" "$ROOT_DIR/backend/services/risk/metrics" "8050"
+wait_for_url "http://localhost:8001/health/live" "ML Inference"
+wait_for_url "http://localhost:8040/health/live" "Feature Enrichment"
+wait_for_url "http://localhost:8050/health/live" "Metrics Aggregator"
+
+echo "Starting API, worker, and notification services..."
+start_backend "api-gateway" "$ROOT_DIR/backend/services/risk/api" "8000"
+start_backend "event-worker" "$ROOT_DIR/backend/services/risk/worker" "8010" "MAX_EVENT_RETRIES=3"
+start_backend "notification-service" "$ROOT_DIR/backend/services/risk/notification" "8020"
+wait_for_url "http://localhost:8000/health/live" "API Gateway"
+wait_for_url "http://localhost:8010/health/live" "Event Worker"
+wait_for_url "http://localhost:8020/health/live" "Notification Service"
+
+echo "Starting data connector..."
+start_backend "data-connector" "$ROOT_DIR/backend/services/risk/connector" "8030"
+wait_for_url "http://localhost:8030/health/live" "Data Connector"
 
 echo "Starting frontend dashboard..."
 ensure_frontend_dependencies
 ensure_port_free "5173" "dashboard"
 start_frontend
-
-echo "Waiting for service health checks..."
-wait_for_url "http://localhost:8001/health/live" "ML Inference"
-wait_for_url "http://localhost:8040/health/live" "Feature Enrichment"
-wait_for_url "http://localhost:8030/health/live" "Data Connector"
-wait_for_url "http://localhost:8050/health/live" "Metrics Aggregator"
-wait_for_url "http://localhost:8000/health/live" "API Gateway"
-wait_for_url "http://localhost:8010/health/live" "Event Worker"
-wait_for_url "http://localhost:8020/health/live" "Notification Service"
 wait_for_url "http://localhost:5173" "Dashboard" 120
 
 # ── Start nginx reverse proxy ───────────────────────────────────

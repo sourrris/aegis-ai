@@ -14,30 +14,52 @@ class BaseServiceSettings(BaseSettings):
         default="amqp://guest:guest@rabbitmq:5672/",
         validation_alias=AliasChoices("RABBITMQ_URL", "rabbitmq_url"),
     )
-    rabbitmq_events_exchange: str = "risk.events.exchange"
-    rabbitmq_events_routing_key: str = "risk.events.ingested"
-    rabbitmq_events_queue: str = "risk.events.queue"
-    rabbitmq_events_v2_routing_key: str = "risk.events.v2.ingested"
-    rabbitmq_events_v2_queue: str = "risk.events.v2.queue"
-    rabbitmq_events_dlq: str = "risk.events.dlq"
-    rabbitmq_alerts_exchange: str = "risk.alerts.exchange"
-    rabbitmq_alerts_routing_key: str = "risk.alerts.raised"
-    rabbitmq_alerts_queue: str = "risk.alerts.queue"
-    rabbitmq_dlx_exchange: str = "risk.deadletter.exchange"
-    rabbitmq_metrics_exchange: str = "risk.metrics.exchange"
-    rabbitmq_metrics_routing_key: str = "risk.metrics.updated"
-    rabbitmq_metrics_queue: str = "risk.metrics.queue"
-    rabbitmq_reference_exchange: str = "risk.reference.exchange"
-    rabbitmq_reference_routing_key: str = "risk.reference.updated"
-    rabbitmq_reference_queue: str = "risk.reference.queue"
+    # Primary standardized RabbitMQ identifiers.
+    rabbitmq_events_exchange: str = "risk.event.exchange"
+    rabbitmq_events_routing_key: str = "risk.event.ingested"
+    rabbitmq_events_queue: str = "risk.event.queue"
+    rabbitmq_events_v2_routing_key: str = "risk.event.v2.ingested"
+    rabbitmq_events_v2_queue: str = "risk.event.v2.queue"
+    rabbitmq_events_dlq: str = "risk.event.dlq"
+    rabbitmq_alerts_exchange: str = "risk.alert.exchange"
+    rabbitmq_alerts_routing_key: str = "risk.alert.raised"
+    rabbitmq_alerts_queue: str = "risk.alert.queue"
+    rabbitmq_dlx_exchange: str = "risk.dead-letter.exchange"
+    rabbitmq_metrics_exchange: str = "risk.metric.exchange"
+    rabbitmq_metrics_routing_key: str = "risk.metric.updated"
+    rabbitmq_metrics_queue: str = "risk.metric.queue"
+    rabbitmq_reference_exchange: str = "risk.reference-data.exchange"
+    rabbitmq_reference_routing_key: str = "risk.reference-data.updated"
+    rabbitmq_reference_queue: str = "risk.reference-data.queue"
+    # Legacy RabbitMQ identifiers retained for staged cutover compatibility.
+    rabbitmq_events_exchange_legacy: str = "risk.events.exchange"
+    rabbitmq_events_routing_key_legacy: str = "risk.events.ingested"
+    rabbitmq_events_queue_legacy: str = "risk.events.queue"
+    rabbitmq_events_v2_routing_key_legacy: str = "risk.events.v2.ingested"
+    rabbitmq_events_v2_queue_legacy: str = "risk.events.v2.queue"
+    rabbitmq_events_dlq_legacy: str = "risk.events.dlq"
+    rabbitmq_alerts_exchange_legacy: str = "risk.alerts.exchange"
+    rabbitmq_alerts_routing_key_legacy: str = "risk.alerts.raised"
+    rabbitmq_alerts_queue_legacy: str = "risk.alerts.queue"
+    rabbitmq_dlx_exchange_legacy: str = "risk.deadletter.exchange"
+    rabbitmq_metrics_exchange_legacy: str = "risk.metrics.exchange"
+    rabbitmq_metrics_routing_key_legacy: str = "risk.metrics.updated"
+    rabbitmq_metrics_queue_legacy: str = "risk.metrics.queue"
+    rabbitmq_reference_exchange_legacy: str = "risk.reference.exchange"
+    rabbitmq_reference_routing_key_legacy: str = "risk.reference.updated"
+    rabbitmq_reference_queue_legacy: str = "risk.reference.queue"
     rabbitmq_queue_type: str = "classic"
 
     redis_url: str = Field(
         default="redis://redis:6379/0",
         validation_alias=AliasChoices("REDIS_URL", "redis_url"),
     )
-    redis_alert_channel: str = "risk.alerts.live"
-    redis_metrics_channel: str = "risk.metrics.live"
+    # Primary standardized Redis channels.
+    redis_alert_channel: str = "risk.live.alerts"
+    redis_metrics_channel: str = "risk.live.metrics"
+    # Legacy channels retained for staged cutover compatibility.
+    redis_alert_channel_legacy: str = "risk.alerts.live"
+    redis_metrics_channel_legacy: str = "risk.metrics.live"
 
     postgres_dsn: str = Field(
         default="postgresql+asyncpg://risk:risk@postgres:5432/risk_monitor",

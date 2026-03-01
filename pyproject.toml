@@ -8,6 +8,8 @@ ignore = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]
+python_files = ["test_*.py", "*.test.py"]
+addopts = ["--import-mode=importlib"]
 asyncio_mode = "auto"
 
 [tool.mypy]
@@ -22,9 +24,6 @@ ignore_missing_imports = true
 module = [
     "tests.*",
     "backend.tests.*",
-    "test_auth_rs256_sessions",
-    "test_models_routes_contract",
-    "test_models_training_flow",
-    "test_worker_repository_jsonb",
+    "risk.*",
 ]
 disallow_untyped_defs = false

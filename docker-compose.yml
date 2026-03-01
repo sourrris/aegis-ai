@@ -43,7 +43,7 @@ services:
   ml-inference:
     build:
       context: ./backend
-      dockerfile: services/ml_inference/Dockerfile
+      dockerfile: services/risk/ml/Dockerfile
     container_name: risk-ml-inference
     environment:
       SERVICE_NAME: ml-inference
@@ -74,7 +74,7 @@ services:
   feature-enrichment:
     build:
       context: ./backend
-      dockerfile: services/feature_enrichment/Dockerfile
+      dockerfile: services/risk/enrichment/Dockerfile
     container_name: risk-feature-enrichment
     environment:
       SERVICE_NAME: feature-enrichment
@@ -97,7 +97,7 @@ services:
   data-connector:
     build:
       context: ./backend
-      dockerfile: services/data_connector/Dockerfile
+      dockerfile: services/risk/connector/Dockerfile
     container_name: risk-data-connector
     environment:
       SERVICE_NAME: data-connector
@@ -130,7 +130,7 @@ services:
   metrics-aggregator:
     build:
       context: ./backend
-      dockerfile: services/metrics_aggregator/Dockerfile
+      dockerfile: services/risk/metrics/Dockerfile
     container_name: risk-metrics-aggregator
     environment:
       SERVICE_NAME: metrics-aggregator
@@ -155,7 +155,7 @@ services:
   api-gateway:
     build:
       context: ./backend
-      dockerfile: services/api_gateway/Dockerfile
+      dockerfile: services/risk/api/Dockerfile
     container_name: risk-api-gateway
     environment:
       SERVICE_NAME: api-gateway
@@ -189,7 +189,7 @@ services:
   event-worker:
     build:
       context: ./backend
-      dockerfile: services/event_worker/Dockerfile
+      dockerfile: services/risk/worker/Dockerfile
     container_name: risk-event-worker
     environment:
       SERVICE_NAME: event-worker
@@ -224,7 +224,7 @@ services:
   notification-service:
     build:
       context: ./backend
-      dockerfile: services/notification_service/Dockerfile
+      dockerfile: services/risk/notification/Dockerfile
     container_name: risk-notification-service
     environment:
       SERVICE_NAME: notification-service
