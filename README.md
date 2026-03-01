@@ -7,6 +7,28 @@ Production-grade distributed scaffold for real-time AI risk monitoring with Fast
 - Frontend: React + TypeScript + Recharts + WebSocket client
 - Infra: Docker + Docker Compose (optional), or native local services via Homebrew
 
+## Prerequisites
+
+Pick one runtime path:
+
+1. Docker path
+   - Docker Desktop (or Docker Engine) with Compose support.
+   - Verify with:
+```bash
+docker --version
+docker compose version
+```
+
+2. Native local path (no Docker)
+   - Homebrew
+   - Python 3.11
+   - Node.js 20+ and npm
+   - PostgreSQL 16, Redis, RabbitMQ, nginx
+   - One-command bootstrap:
+```bash
+./scripts/local/setup.sh
+```
+
 ## Services
 - API Gateway: Auth, ingestion, model management proxy
 - Event Worker: Consumes events, calls ML inference, persists results, emits alerts
@@ -18,6 +40,8 @@ Production-grade distributed scaffold for real-time AI risk monitoring with Fast
 - Dashboard: React live monitoring UI
 
 ## Local Development (No Docker)
+Use this path if Docker is not installed or Docker daemon is unavailable on your machine.
+
 1. Run one-time setup (installs/starts PostgreSQL, Redis, RabbitMQ; creates `.venv`; installs backend + frontend dependencies):
 
 ```bash
@@ -36,7 +60,7 @@ Production-grade distributed scaffold for real-time AI risk monitoring with Fast
 ./scripts/local/stop.sh
 ```
 
-5. Optional operational helpers:
+4. Optional operational helpers:
 
 ```bash
 # Ensure events_v2 partitions for the next 14 days
@@ -46,7 +70,7 @@ Production-grade distributed scaffold for real-time AI risk monitoring with Fast
 ./scripts/local/replay-dlq.sh --limit 50
 ```
 
-4. URLs:
+5. URLs:
    - Dashboard `http://localhost:5173`
    - API docs `http://localhost:8000/docs`
    - Data connector status `http://localhost:8030/v1/connectors/status`
@@ -77,6 +101,57 @@ Production-grade distributed scaffold for real-time AI risk monitoring with Fast
    - Notification status `http://ws.localhost/v1/notifications/connections`
    - RabbitMQ `http://localhost:15672` (`guest/guest`)
 
+If Docker is not available (`docker: command not found` or daemon errors), use:
+
+```bash
+./scripts/local/setup.sh
+./scripts/local/start.sh
+```
+
+## After Merge: Local Dependency Recovery
+
+If you pulled/merged and local runs start failing due missing packages or imports, re-sync dependencies:
+
+1. Stop running processes:
+
+```bash
+./scripts/local/stop.sh
+```
+
+2. Reinstall backend dependencies:
+
+```bash
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e backend/libs/common
+python -m pip install -r backend/services/api_gateway/requirements.txt
+python -m pip install -r backend/services/event_worker/requirements.txt
+python -m pip install -r backend/services/ml_inference/requirements.txt
+python -m pip install -r backend/services/notification_service/requirements.txt
+python -m pip install -r backend/services/data_connector/requirements.txt
+python -m pip install -r backend/services/metrics_aggregator/requirements.txt
+python -m pip install -r backend/services/feature_enrichment/requirements.txt
+python -m pip install -r backend/requirements-dev.txt
+```
+
+3. Reinstall frontend dependencies:
+
+```bash
+cd frontend/dashboard && npm install
+```
+
+4. Restart the local stack:
+
+```bash
+./scripts/local/start.sh
+```
+
+5. If `.venv` is missing or broken, run bootstrap again:
+
+```bash
+./scripts/local/setup.sh
+```
+
 ## Codex Web Environment
 Use this when you want to continue working from any device in `chatgpt.com/codex`.
 
@@ -92,13 +167,14 @@ Use this when you want to continue working from any device in `chatgpt.com/codex
 set -euo pipefail
 python -m pip install --upgrade pip
 python -m pip install -e backend/libs/common
-python -m pip install -r backend/services/risk/api/requirements.txt
-python -m pip install -r backend/services/risk/worker/requirements.txt
-python -m pip install -r backend/services/risk/ml/requirements.txt
-python -m pip install -r backend/services/risk/notification/requirements.txt
-python -m pip install -r backend/services/risk/connector/requirements.txt
-python -m pip install -r backend/services/risk/enrichment/requirements.txt
-python -m pip install -r backend/services/risk/metrics/requirements.txt
+python -m pip install -r backend/services/api_gateway/requirements.txt
+python -m pip install -r backend/services/event_worker/requirements.txt
+python -m pip install -r backend/services/ml_inference/requirements.txt
+python -m pip install -r backend/services/notification_service/requirements.txt
+python -m pip install -r backend/services/data_connector/requirements.txt
+python -m pip install -r backend/services/feature_enrichment/requirements.txt
+python -m pip install -r backend/services/metrics_aggregator/requirements.txt
+python -m pip install -r backend/requirements-dev.txt
 npm ci --prefix frontend/dashboard
 ```
 
@@ -147,9 +223,8 @@ Connector control endpoints:
 
 ## CI Baseline (PR1)
 - GitHub Actions workflow: `.github/workflows/ci.yml`
-- Backend checks: Ruff lint, mypy smoke type-check, pytest smoke tests
-- Frontend checks: Vitest + TypeScript build
-- Container sanity: Docker build matrix for all service Dockerfiles
+- `risk.api-quality-gate`: security scan, backend lint/type/tests, migration validation, frontend test/build, kustomize validation
+- `risk.api-build-gate`: docker build sanity for all service images
 
 Dependency and security posture notes are tracked in `docs/engineering.audit.pr1-ci-baseline.md`.
 
