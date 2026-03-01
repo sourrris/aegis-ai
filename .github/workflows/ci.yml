@@ -43,11 +43,12 @@ jobs:
       - uses: azure/setup-kubectl@v4
 
       - name: Security scan
-        uses: gitleaks/gitleaks-action@v2
-        with:
-          args: detect --source . --no-git --redact --exit-code 1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gitleaks_version="8.24.2"
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${gitleaks_version}/gitleaks_${gitleaks_version}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          /tmp/gitleaks detect --source . --no-git --redact --exit-code 1
 
       - name: Install backend dependencies
         run: |
