@@ -25,3 +25,12 @@ def test_production_settings_accept_strong_hs_secrets(monkeypatch: pytest.Monkey
     settings = ApiGatewaySettings()
     assert settings.jwt_secret_key == "s" * 48
     assert settings.jwt_refresh_secret_key == "r" * 48
+
+
+def test_production_settings_accept_rs256_with_pem_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("JWT_ALGORITHM", "RS256")
+    monkeypatch.setenv("JWT_PRIVATE_KEY_PEM", "-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----")
+    monkeypatch.setenv("JWT_PUBLIC_KEY_PEM", "-----BEGIN PUBLIC KEY-----\nfake\n-----END PUBLIC KEY-----")
+    settings = ApiGatewaySettings()
+    assert settings.jwt_algorithm == "RS256"

@@ -49,12 +49,44 @@ class BaseServiceSettings(BaseSettings):
         validation_alias=AliasChoices("JWT_SECRET", "jwt_secret_key"),
     )
     jwt_algorithm: str = "HS256"
+    jwt_private_key_pem: str = Field(
+        default="",
+        validation_alias=AliasChoices("JWT_PRIVATE_KEY_PEM", "jwt_private_key_pem"),
+    )
+    jwt_public_key_pem: str = Field(
+        default="",
+        validation_alias=AliasChoices("JWT_PUBLIC_KEY_PEM", "jwt_public_key_pem"),
+    )
+    jwt_key_id: str = Field(
+        default="aegis-default-kid",
+        validation_alias=AliasChoices("JWT_KEY_ID", "jwt_key_id"),
+    )
     jwt_access_token_minutes: int = 60
     jwt_refresh_secret_key: str = Field(
         default="change-me-refresh-secret",
         validation_alias=AliasChoices("JWT_REFRESH_SECRET", "jwt_refresh_secret_key"),
     )
     jwt_refresh_token_minutes: int = 10080
+    auth_access_cookie_name: str = Field(
+        default="aegis_access_token",
+        validation_alias=AliasChoices("AUTH_ACCESS_COOKIE_NAME", "auth_access_cookie_name"),
+    )
+    auth_refresh_cookie_name: str = Field(
+        default="aegis_refresh_token",
+        validation_alias=AliasChoices("AUTH_REFRESH_COOKIE_NAME", "auth_refresh_cookie_name"),
+    )
+    auth_cookie_domain: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("AUTH_COOKIE_DOMAIN", "auth_cookie_domain"),
+    )
+    auth_cookie_secure: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("AUTH_COOKIE_SECURE", "auth_cookie_secure"),
+    )
+    auth_cookie_samesite: str = Field(
+        default="lax",
+        validation_alias=AliasChoices("AUTH_COOKIE_SAMESITE", "auth_cookie_samesite"),
+    )
 
 
     frontend_base_url: str = Field(
@@ -107,6 +139,25 @@ class BaseServiceSettings(BaseSettings):
     connector_auto_ingest_tenant_id: str = "tenant-alpha"
     connector_auto_ingest_subject: str = "connector-service"
     connector_auto_ingest_timeout_seconds: int = 10
+    model_activation_min_samples: int = Field(
+        default=64,
+        validation_alias=AliasChoices("MODEL_ACTIVATION_MIN_SAMPLES", "model_activation_min_samples"),
+    )
+    model_activation_min_relative_improvement: float = Field(
+        default=0.02,
+        validation_alias=AliasChoices(
+            "MODEL_ACTIVATION_MIN_RELATIVE_IMPROVEMENT",
+            "model_activation_min_relative_improvement",
+        ),
+    )
+    model_activation_threshold_ratio_min: float = Field(
+        default=0.5,
+        validation_alias=AliasChoices("MODEL_ACTIVATION_THRESHOLD_RATIO_MIN", "model_activation_threshold_ratio_min"),
+    )
+    model_activation_threshold_ratio_max: float = Field(
+        default=2.0,
+        validation_alias=AliasChoices("MODEL_ACTIVATION_THRESHOLD_RATIO_MAX", "model_activation_threshold_ratio_max"),
+    )
 
     # Data connector source configuration.
     ofac_sls_url: str = "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.CSV"
@@ -147,10 +198,47 @@ class BaseServiceSettings(BaseSettings):
                 errors.append("JWT_SECRET must be set to a non-default value with length >= 32 for HS* algorithms")
             if self._is_placeholder_secret(self.jwt_refresh_secret_key) or len(self.jwt_refresh_secret_key) < 32:
                 errors.append("JWT_REFRESH_SECRET must be set to a non-default value with length >= 32")
+        elif self.jwt_algorithm.upper().startswith("RS"):
+            if "BEGIN" not in self.jwt_private_key_pem:
+                errors.append("JWT_PRIVATE_KEY_PEM must be set for RS* algorithms")
+            if "BEGIN" not in self.jwt_public_key_pem:
+                errors.append("JWT_PUBLIC_KEY_PEM must be set for RS* algorithms")
+
+        samesite = (self.auth_cookie_samesite or "").strip().lower()
+        if samesite not in {"lax", "strict", "none"}:
+            errors.append("AUTH_COOKIE_SAMESITE must be one of: lax, strict, none")
 
         if errors:
             raise ValueError("Production secret validation failed: " + "; ".join(errors))
         return self
+
+    @property
+    def jwt_uses_asymmetric(self) -> bool:
+        return self.jwt_algorithm.upper().startswith(("RS", "PS", "ES"))
+
+    @property
+    def jwt_signing_key(self) -> str:
+        if self.jwt_uses_asymmetric:
+            return self.jwt_private_key_pem
+        return self.jwt_secret_key
+
+    @property
+    def jwt_verification_key(self) -> str:
+        if self.jwt_uses_asymmetric:
+            return self.jwt_public_key_pem
+        return self.jwt_secret_key
+
+    @property
+    def jwt_refresh_signing_key(self) -> str:
+        if self.jwt_uses_asymmetric:
+            return self.jwt_private_key_pem
+        return self.jwt_refresh_secret_key
+
+    @property
+    def jwt_refresh_verification_key(self) -> str:
+        if self.jwt_uses_asymmetric:
+            return self.jwt_public_key_pem
+        return self.jwt_refresh_secret_key
 
     def uvicorn_config(self) -> dict:
         """Return host/port settings for Uvicorn startup."""

@@ -41,6 +41,7 @@ def _build_feature_distribution_snapshots(rows: list[dict], bucket: datetime) ->
         tenant_id = row.get("tenant_id")
         model_name = str(row.get("model_name") or "")
         model_version = str(row.get("model_version") or "")
+        feature_idx = int(row.get("feature_idx") or 0)
         key = (tenant_id, model_name, model_version)
         group = grouped.setdefault(
             key,
@@ -51,6 +52,7 @@ def _build_feature_distribution_snapshots(rows: list[dict], bucket: datetime) ->
                 "recent_decision_count": int(row.get("recent_decision_count") or 0),
                 "baseline_decision_count": int(row.get("baseline_decision_count") or 0),
                 "contributors": [],
+                "baseline_source": "window_baseline",
             },
         )
         group["recent_decision_count"] = max(
@@ -63,14 +65,36 @@ def _build_feature_distribution_snapshots(rows: list[dict], bucket: datetime) ->
         )
 
         recent_feature_count = int(row.get("recent_feature_count") or 0)
+        recent_mean = _as_float(row.get("recent_mean"))
+        recent_std = _as_float(row.get("recent_std"))
+        training_mean = row.get("training_mean")
+        training_std = row.get("training_std")
+        training_sample_count = int(row.get("training_sample_count") or 0)
+
         baseline_feature_count = int(row.get("baseline_feature_count") or 0)
+        baseline_mean = _as_float(row.get("baseline_mean"))
+        baseline_std = _as_float(row.get("baseline_std"))
+        baseline_source = "window_baseline"
+
+        has_training_baseline = (
+            isinstance(training_mean, list)
+            and isinstance(training_std, list)
+            and 0 <= feature_idx < len(training_mean)
+            and 0 <= feature_idx < len(training_std)
+        )
+        if has_training_baseline:
+            candidate_std = _as_float(training_std[feature_idx], default=0.0)
+            if candidate_std > 0:
+                baseline_mean = _as_float(training_mean[feature_idx])
+                baseline_std = candidate_std
+                baseline_feature_count = max(baseline_feature_count, training_sample_count)
+                group["baseline_decision_count"] = max(int(group["baseline_decision_count"]), training_sample_count)
+                group["baseline_source"] = "training_preprocessing"
+                baseline_source = "training_preprocessing"
+
         if recent_feature_count < MIN_RECENT_FEATURE_SAMPLES or baseline_feature_count < MIN_BASELINE_FEATURE_SAMPLES:
             continue
 
-        recent_mean = _as_float(row.get("recent_mean"))
-        baseline_mean = _as_float(row.get("baseline_mean"))
-        recent_std = _as_float(row.get("recent_std"))
-        baseline_std = _as_float(row.get("baseline_std"))
         denom = baseline_std if baseline_std > 1e-6 else 1e-6
         mean_shift = abs(recent_mean - baseline_mean)
         mean_z = mean_shift / denom
@@ -79,13 +103,14 @@ def _build_feature_distribution_snapshots(rows: list[dict], bucket: datetime) ->
 
         group["contributors"].append(
             {
-                "feature_index": int(row.get("feature_idx") or 0),
+                "feature_index": feature_idx,
                 "recent_feature_count": recent_feature_count,
                 "baseline_feature_count": baseline_feature_count,
                 "recent_mean": recent_mean,
                 "baseline_mean": baseline_mean,
                 "recent_std": recent_std,
                 "baseline_std": baseline_std,
+                "baseline_source": baseline_source,
                 "mean_shift": mean_shift,
                 "mean_shift_z": mean_z,
                 "std_shift_ratio": std_shift,
@@ -122,6 +147,7 @@ def _build_feature_distribution_snapshots(rows: list[dict], bucket: datetime) ->
                     "method": "feature_distribution_shift",
                     "recent_decision_count": int(group["recent_decision_count"]),
                     "baseline_decision_count": int(group["baseline_decision_count"]),
+                    "baseline_source": str(group["baseline_source"]),
                     "feature_count_evaluated": len(contributors),
                     "top_contributors": top_contributors,
                 },
@@ -362,6 +388,29 @@ class MetricsAggregator:
                         COALESCE(STDDEV_POP(feature_value), 0.0) AS baseline_std
                     FROM baseline_expanded
                     GROUP BY tenant_id, model_name, model_version, feature_idx
+                ),
+                latest_training_runs AS (
+                    SELECT
+                        model_name,
+                        model_version,
+                        metrics,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY model_name, model_version
+                            ORDER BY finished_at DESC NULLS LAST, started_at DESC
+                        ) AS rn
+                    FROM model_training_runs
+                    WHERE status = 'success'
+                      AND model_version IS NOT NULL
+                ),
+                training_baselines AS (
+                    SELECT
+                        model_name,
+                        model_version,
+                        metrics->'preprocessing'->'mean' AS training_mean,
+                        metrics->'preprocessing'->'std' AS training_std,
+                        COALESCE((metrics->>'sample_count')::INT, 0) AS training_sample_count
+                    FROM latest_training_runs
+                    WHERE rn = 1
                 )
                 SELECT
                     rs.tenant_id,
@@ -375,7 +424,10 @@ class MetricsAggregator:
                     COALESCE(bs.baseline_mean, 0.0) AS baseline_mean,
                     COALESCE(bs.baseline_std, 0.0) AS baseline_std,
                     rm.recent_decision_count,
-                    COALESCE(bm.baseline_decision_count, 0) AS baseline_decision_count
+                    COALESCE(bm.baseline_decision_count, 0) AS baseline_decision_count,
+                    tb.training_mean,
+                    tb.training_std,
+                    COALESCE(tb.training_sample_count, 0) AS training_sample_count
                 FROM recent_stats rs
                 JOIN recent_models rm
                   ON rm.tenant_id = rs.tenant_id
@@ -390,6 +442,9 @@ class MetricsAggregator:
                   ON bm.tenant_id = rs.tenant_id
                  AND bm.model_name = rs.model_name
                  AND bm.model_version = rs.model_version
+                LEFT JOIN training_baselines tb
+                  ON tb.model_name = rs.model_name
+                 AND tb.model_version = rs.model_version
                 """
             )
         )

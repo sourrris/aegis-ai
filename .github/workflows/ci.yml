@@ -36,6 +36,38 @@ jobs:
       - name: Test (pytest)
         run: pytest -q
 
+  backend-migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: risk_monitor
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d risk_monitor"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install migration dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e backend/libs/common
+          python -m pip install -r backend/services/api_gateway/requirements.txt
+          python -m pip install -r backend/requirements-dev.txt
+      - name: Alembic upgrade head
+        run: |
+          cd backend
+          DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/risk_monitor alembic -c alembic.ini upgrade head
+
   frontend-quality:
     runs-on: ubuntu-latest
     defaults:
@@ -70,3 +102,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build image
         run: docker build -f ${{ matrix.dockerfile }} .
+
+  infra-manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-kubectl@v4
+      - name: Validate kustomize overlays
+        run: |
+          kubectl kustomize infra/eks/overlays/staging > /dev/null
+          kubectl kustomize infra/eks/overlays/prod > /dev/null

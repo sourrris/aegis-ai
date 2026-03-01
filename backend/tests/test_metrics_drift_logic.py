@@ -65,6 +65,7 @@ def test_feature_distribution_drift_produces_sorted_top_contributors() -> None:
     assert len(top_contributors) == 2
     assert top_contributors[0]["score"] >= top_contributors[1]["score"]
     assert snapshot["details"]["method"] == "feature_distribution_shift"
+    assert snapshot["details"]["baseline_source"] in {"window_baseline", "training_preprocessing"}
 
 
 def test_feature_distribution_drift_respects_minimum_sample_gates() -> None:
@@ -88,3 +89,35 @@ def test_feature_distribution_drift_respects_minimum_sample_gates() -> None:
 
     snapshots = _build_feature_distribution_snapshots(rows, bucket)
     assert snapshots == []
+
+
+def test_feature_distribution_drift_uses_training_preprocessing_when_available() -> None:
+    bucket = datetime(2026, 3, 1, 12, 0, tzinfo=UTC)
+    rows = [
+        {
+            "tenant_id": "tenant-alpha",
+            "model_name": "risk_autoencoder",
+            "model_version": "20260301100000",
+            "feature_idx": 0,
+            "recent_feature_count": 120,
+            "recent_mean": 1.5,
+            "recent_std": 1.1,
+            "baseline_feature_count": 0,
+            "baseline_mean": 0.0,
+            "baseline_std": 0.0,
+            "recent_decision_count": 120,
+            "baseline_decision_count": 0,
+            "training_mean": [0.2, 0.3],
+            "training_std": [0.4, 0.5],
+            "training_sample_count": 160,
+        }
+    ]
+
+    snapshots = _build_feature_distribution_snapshots(rows, bucket)
+    assert len(snapshots) == 1
+    snapshot = snapshots[0]
+    assert snapshot["details"]["baseline_source"] == "training_preprocessing"
+    contributor = snapshot["details"]["top_contributors"][0]
+    assert contributor["baseline_source"] == "training_preprocessing"
+    assert contributor["baseline_mean"] == 0.2
+    assert contributor["baseline_std"] == 0.4

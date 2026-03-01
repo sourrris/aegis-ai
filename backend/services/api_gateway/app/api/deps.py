@@ -5,16 +5,20 @@ from app.config import get_settings
 from risk_common.security import decode_access_token
 from risk_common.schemas_v2 import AuthClaims
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 settings = get_settings()
 
 
 async def get_current_subject(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> str:
+    raw_token = credentials.credentials if credentials else request.cookies.get(settings.auth_access_cookie_name)
+    if not raw_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
     payload = decode_access_token(
-        credentials.credentials,
-        secret_key=settings.jwt_secret_key,
+        raw_token,
+        secret_key=settings.jwt_verification_key,
         algorithm=settings.jwt_algorithm,
     )
     if not payload or not payload.get("sub"):
@@ -23,11 +27,15 @@ async def get_current_subject(
 
 
 async def get_auth_claims(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> AuthClaims:
+    raw_token = credentials.credentials if credentials else request.cookies.get(settings.auth_access_cookie_name)
+    if not raw_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
     payload = decode_access_token(
-        credentials.credentials,
-        secret_key=settings.jwt_secret_key,
+        raw_token,
+        secret_key=settings.jwt_verification_key,
         algorithm=settings.jwt_algorithm,
     )
     if not payload or not payload.get("sub"):

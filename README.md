@@ -122,6 +122,7 @@ docker compose up -d --build
 - Redis Pub/Sub-based real-time streaming
 - JWT authentication
 - JWT v2 tenant-aware claims + refresh token flow (`/v2/auth/token`, `/v2/auth/refresh`)
+- RS256/JWKS-ready auth support (`/v1/auth/jwks`) with cookie refresh/logout (`/v1/auth/refresh`, `/v1/auth/logout`)
 - Idempotent ingestion and processing controls
 - Retry + dead-letter queue handling
 - Structured JSON logging
@@ -169,6 +170,8 @@ Recent hardening updates include:
 - Backward-compatible env standardization support (`DATABASE_URL`, `REDIS_URL`, `RABBITMQ_URL`, `JWT_SECRET`).
 - Auth password verification with opportunistic hash upgrades toward argon2.
 - Secure default admin seed hash generation using PostgreSQL `pgcrypto` (`crypt` + `gen_salt`).
+
+Kubernetes manifests for EKS (IRSA + External Secrets + backend deployments) are available under `infra/eks/`.
 
 
 ## Social Sign-In (Google / Apple)

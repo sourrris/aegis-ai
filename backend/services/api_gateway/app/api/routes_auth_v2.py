@@ -31,7 +31,7 @@ async def issue_token_v2(
 
     access_token = create_access_token(
         subject=user.username,
-        secret_key=settings.jwt_secret_key,
+        secret_key=settings.jwt_signing_key,
         algorithm=settings.jwt_algorithm,
         expires_minutes=settings.jwt_access_token_minutes,
         tenant_id=context["tenant_id"],
@@ -40,7 +40,7 @@ async def issue_token_v2(
     )
     refresh_token = create_refresh_token(
         subject=user.username,
-        secret_key=settings.jwt_refresh_secret_key,
+        secret_key=settings.jwt_refresh_signing_key,
         algorithm=settings.jwt_algorithm,
         expires_minutes=settings.jwt_refresh_token_minutes,
         tenant_id=context["tenant_id"],
@@ -59,7 +59,7 @@ async def issue_token_v2(
 async def refresh_token_v2(payload: RefreshTokenRequest) -> TokenPairResponse:
     claims = decode_refresh_token(
         payload.refresh_token,
-        secret_key=settings.jwt_refresh_secret_key,
+        secret_key=settings.jwt_refresh_verification_key,
         algorithm=settings.jwt_algorithm,
     )
     if not claims:
@@ -74,7 +74,7 @@ async def refresh_token_v2(payload: RefreshTokenRequest) -> TokenPairResponse:
 
     access_token = create_access_token(
         subject=subject,
-        secret_key=settings.jwt_secret_key,
+        secret_key=settings.jwt_signing_key,
         algorithm=settings.jwt_algorithm,
         expires_minutes=settings.jwt_access_token_minutes,
         tenant_id=tenant_id,
@@ -83,7 +83,7 @@ async def refresh_token_v2(payload: RefreshTokenRequest) -> TokenPairResponse:
     )
     refresh_token = create_refresh_token(
         subject=subject,
-        secret_key=settings.jwt_refresh_secret_key,
+        secret_key=settings.jwt_refresh_signing_key,
         algorithm=settings.jwt_algorithm,
         expires_minutes=settings.jwt_refresh_token_minutes,
         tenant_id=tenant_id,

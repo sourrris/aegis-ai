@@ -28,6 +28,8 @@ This repository now includes the foundational v2 operational stack for transacti
 - Connector runtime state:
   - `source_connector_state` tracks per-source cursor/backoff/degraded status
   - `/v1/connectors/*` includes status/runs/errors/enable/disable/run-now + on-demand lookup routes
+- Auth refresh-session table:
+  - `refresh_sessions` supports cookie-based refresh token rotation/logout revocation
 
 ## Applying migrations
 

@@ -36,7 +36,7 @@ async def alerts_stream(websocket: WebSocket) -> None:
     token = websocket.query_params.get("token")
     payload = None
     if token:
-        payload = decode_access_token(token, settings.jwt_secret_key, settings.jwt_algorithm)
+        payload = decode_access_token(token, settings.jwt_verification_key, settings.jwt_algorithm)
 
     if payload is None:
         await websocket.close(code=1008)
@@ -62,7 +62,7 @@ async def multiplexed_stream(websocket: WebSocket) -> None:
     token = websocket.query_params.get("token")
     payload = None
     if token:
-        payload = decode_access_token(token, settings.jwt_secret_key, settings.jwt_algorithm)
+        payload = decode_access_token(token, settings.jwt_verification_key, settings.jwt_algorithm)
 
     if payload is None:
         await websocket.close(code=1008)

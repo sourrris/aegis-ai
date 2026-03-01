@@ -1,4 +1,5 @@
 import json
+import hashlib
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -130,6 +131,143 @@ class UserRepository:
             "roles": [fallback_role],
             "scopes": UserRepository.ROLE_DEFAULT_SCOPES.get(fallback_role, UserRepository.ROLE_DEFAULT_SCOPES["viewer"]),
         }
+
+
+class RefreshSessionRepository:
+    @staticmethod
+    def hash_token(token: str) -> str:
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    async def create(
+        session: AsyncSession,
+        *,
+        session_id: UUID,
+        username: str,
+        tenant_id: str,
+        refresh_token: str,
+        expires_at: datetime,
+        user_agent: str | None = None,
+        ip_address: str | None = None,
+    ) -> None:
+        await session.execute(
+            text(
+                """
+                INSERT INTO refresh_sessions (
+                    session_id,
+                    username,
+                    tenant_id,
+                    refresh_token_hash,
+                    issued_at,
+                    expires_at,
+                    last_seen_at,
+                    user_agent,
+                    ip_address
+                ) VALUES (
+                    :session_id,
+                    :username,
+                    :tenant_id,
+                    :refresh_token_hash,
+                    NOW(),
+                    :expires_at,
+                    NOW(),
+                    :user_agent,
+                    :ip_address
+                )
+                """
+            ),
+            {
+                "session_id": str(session_id),
+                "username": username,
+                "tenant_id": tenant_id,
+                "refresh_token_hash": RefreshSessionRepository.hash_token(refresh_token),
+                "expires_at": expires_at,
+                "user_agent": user_agent,
+                "ip_address": ip_address,
+            },
+        )
+        await session.commit()
+
+    @staticmethod
+    async def get_active_by_session_id(session: AsyncSession, *, session_id: str) -> dict | None:
+        row = await session.execute(
+            text(
+                """
+                SELECT
+                    session_id,
+                    username,
+                    tenant_id,
+                    refresh_token_hash,
+                    issued_at,
+                    expires_at,
+                    rotated_at,
+                    revoked_at,
+                    last_seen_at
+                FROM refresh_sessions
+                WHERE session_id = :session_id
+                  AND revoked_at IS NULL
+                LIMIT 1
+                """
+            ),
+            {"session_id": session_id},
+        )
+        result = row.first()
+        return dict(result._mapping) if result else None
+
+    @staticmethod
+    async def rotate(
+        session: AsyncSession,
+        *,
+        session_id: str,
+        current_refresh_token: str,
+        next_refresh_token: str,
+        expires_at: datetime,
+        user_agent: str | None = None,
+        ip_address: str | None = None,
+    ) -> bool:
+        result = await session.execute(
+            text(
+                """
+                UPDATE refresh_sessions
+                SET
+                    refresh_token_hash = :next_hash,
+                    expires_at = :expires_at,
+                    rotated_at = NOW(),
+                    last_seen_at = NOW(),
+                    user_agent = COALESCE(:user_agent, user_agent),
+                    ip_address = COALESCE(:ip_address, ip_address)
+                WHERE session_id = :session_id
+                  AND revoked_at IS NULL
+                  AND expires_at > NOW()
+                  AND refresh_token_hash = :current_hash
+                """
+            ),
+            {
+                "session_id": session_id,
+                "current_hash": RefreshSessionRepository.hash_token(current_refresh_token),
+                "next_hash": RefreshSessionRepository.hash_token(next_refresh_token),
+                "expires_at": expires_at,
+                "user_agent": user_agent,
+                "ip_address": ip_address,
+            },
+        )
+        await session.commit()
+        return bool(result.rowcount)
+
+    @staticmethod
+    async def revoke(session: AsyncSession, *, session_id: str) -> None:
+        await session.execute(
+            text(
+                """
+                UPDATE refresh_sessions
+                SET revoked_at = NOW(), last_seen_at = NOW()
+                WHERE session_id = :session_id
+                  AND revoked_at IS NULL
+                """
+            ),
+            {"session_id": session_id},
+        )
+        await session.commit()
 
 class EventRepository:
     @staticmethod

@@ -399,6 +399,11 @@ class ModelStore:
             "sample_count": int(x.shape[0]),
             "feature_dim": feature_dim,
             "duration_seconds": round(float(time.perf_counter() - started), 4),
+            "preprocessing": {
+                "type": "zscore",
+                "mean": [float(v) for v in train_mean.tolist()],
+                "std": [float(v) for v in train_std.tolist()],
+            },
         }
         preprocessing = {
             "type": "zscore",

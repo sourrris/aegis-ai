@@ -276,7 +276,7 @@ class ConnectorScheduler:
 
         token = create_access_token(
             subject=settings.connector_auto_ingest_subject,
-            secret_key=settings.jwt_secret_key,
+            secret_key=settings.jwt_signing_key,
             algorithm=settings.jwt_algorithm,
             expires_minutes=5,
             tenant_id=tenant_id,
@@ -428,7 +428,7 @@ class ConnectorScheduler:
         tenant_id = settings.connector_auto_ingest_tenant_id.strip() or "tenant-alpha"
         token = create_access_token(
             subject=settings.connector_auto_ingest_subject,
-            secret_key=settings.jwt_secret_key,
+            secret_key=settings.jwt_signing_key,
             algorithm=settings.jwt_algorithm,
             expires_minutes=15,
             tenant_id=tenant_id,
@@ -465,4 +465,3 @@ class ConnectorScheduler:
                     "connector_events_ingestion_failed",
                     extra={"source": source_name, "error": str(exc)}
                 )
-

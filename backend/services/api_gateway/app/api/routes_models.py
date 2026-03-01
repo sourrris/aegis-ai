@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_scope
 from app.application.services import ModelGatewayError, ModelManagementService
+from app.config import get_settings
 from app.infrastructure.db import get_db_session
 from app.infrastructure.repositories import ModelRepository
 from app.infrastructure.repositories_v2 import ModelOpsRepository
@@ -23,6 +24,7 @@ from risk_common.schemas import (
 from risk_common.schemas_v2 import AuthClaims, ModelTrainingRun
 
 router = APIRouter(prefix="/v1/models", tags=["models"])
+settings = get_settings()
 
 
 class ActivateModelRequest(BaseModel):
@@ -30,10 +32,10 @@ class ActivateModelRequest(BaseModel):
     model_version: str
 
 
-ACTIVATION_MIN_SAMPLES = 64
-ACTIVATION_MIN_RELATIVE_IMPROVEMENT = 0.02
-ACTIVATION_THRESHOLD_RATIO_MIN = 0.5
-ACTIVATION_THRESHOLD_RATIO_MAX = 2.0
+ACTIVATION_MIN_SAMPLES = settings.model_activation_min_samples
+ACTIVATION_MIN_RELATIVE_IMPROVEMENT = settings.model_activation_min_relative_improvement
+ACTIVATION_THRESHOLD_RATIO_MIN = settings.model_activation_threshold_ratio_min
+ACTIVATION_THRESHOLD_RATIO_MAX = settings.model_activation_threshold_ratio_max
 
 
 def _as_float(value: object | None, default: float | None = None) -> float | None:

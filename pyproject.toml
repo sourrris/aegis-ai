@@ -22,6 +22,8 @@ ignore_missing_imports = true
 module = [
     "tests.*",
     "backend.tests.*",
+    "test_auth_rs256_sessions",
+    "test_models_routes_contract",
     "test_models_training_flow",
     "test_worker_repository_jsonb",
 ]
