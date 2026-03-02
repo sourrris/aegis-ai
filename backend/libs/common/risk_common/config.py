@@ -157,10 +157,14 @@ class BaseServiceSettings(BaseSettings):
     connector_backoff_max_seconds: int = 1800
     connector_circuit_breaker_failures: int = 5
     connector_jitter_seconds: int = 15
+    connector_reference_modules: str = "aegis_connectors.reference_plugins"
+    connector_ingest_modules: str = "aegis_connectors.ingest_plugins"
+    connector_source_route_map_json: str = "{}"
     connector_auto_ingest_on_reference_update: bool = True
     connector_auto_ingest_tenant_id: str = "tenant-alpha"
     connector_auto_ingest_subject: str = "connector-service"
     connector_auto_ingest_timeout_seconds: int = 10
+    tenant_config_enforcement_mode: str = "permissive"
     model_activation_min_samples: int = Field(
         default=64,
         validation_alias=AliasChoices("MODEL_ACTIVATION_MIN_SAMPLES", "model_activation_min_samples"),
