@@ -8,9 +8,9 @@ import httpx
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.append(str(ROOT / "libs" / "common"))
-sys.path.append(str(ROOT / "services" / "risk" / "connector"))
-sys.path.append(str(ROOT.parent / "aegis-connectors" / "python"))
+sys.path.insert(0, str(ROOT.parent / "aegis-connectors" / "python"))
+sys.path.insert(0, str(ROOT / "services" / "risk" / "connector"))
+sys.path.insert(0, str(ROOT / "libs" / "common"))
 
 reference_plugins = importlib.import_module("aegis_connectors.reference_plugins")
 
