@@ -1,16 +1,40 @@
 """Regression coverage for the abuse.ch reference connector."""
 
 import importlib
+import importlib.util
 import sys
+import types
 from pathlib import Path
 
 import httpx
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT.parent / "aegis-connectors" / "python"))
-sys.path.insert(0, str(ROOT / "services" / "risk" / "connector"))
 sys.path.insert(0, str(ROOT / "libs" / "common"))
+sys.path.insert(0, str(ROOT.parent / "aegis-connectors" / "python"))
+
+CONNECTOR_APP_ROOT = ROOT / "services" / "risk" / "connector" / "app"
+
+
+def _load_module(module_name: str, file_path: Path):
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+app_package = types.ModuleType("app")
+app_package.__path__ = [str(CONNECTOR_APP_ROOT)]
+sys.modules["app"] = app_package
+
+application_package = types.ModuleType("app.application")
+application_package.__path__ = [str(CONNECTOR_APP_ROOT / "application")]
+sys.modules["app.application"] = application_package
+
+_load_module("app.config", CONNECTOR_APP_ROOT / "config.py")
+_load_module("app.application.connectors", CONNECTOR_APP_ROOT / "application" / "connectors.py")
 
 reference_plugins = importlib.import_module("aegis_connectors.reference_plugins")
 
