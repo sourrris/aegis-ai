@@ -196,10 +196,11 @@ class BaseServiceSettings(BaseSettings):
 
     # Data connector source configuration.
     ofac_sls_url: str = "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.CSV"
-    fatf_source_url: str = "https://www.fatf-gafi.org/en/topics/high-risk-and-other-monitored-jurisdictions.html"
+    fatf_source_url: str = "https://www.fatf-gafi.org/en/countries/black-and-grey-lists.html"
     ecb_fx_url: str = "https://data-api.ecb.europa.eu/service/data"
     mempool_api_url: str = "https://mempool.space/api"
     abusech_api_url: str = "https://abuse.ch/api/v1"
+    abusech_ip_blocklist_url: str = "https://feodotracker.abuse.ch/downloads/ipblocklist_recommended.txt"
     connector_enable_ofac: bool = True
     connector_enable_fatf: bool = True
     connector_enable_ecb: bool = True

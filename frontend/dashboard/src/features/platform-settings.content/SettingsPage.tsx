@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useAuth } from '../../app/state/auth-context';
 import { useUI } from '../../app/state/ui-context';
 import { API_BASE_URL, CONTROL_OPS_URL, CONTROL_TENANT_URL, WS_BASE_URL } from '../../shared/lib/constants';
+import { buildConsoleHandoffUrl } from '../../shared/lib/control-handoff';
 import { Badge } from '../../shared/ui/badge';
 import { Button } from '../../shared/ui/button';
 import { DataPanel } from '../../shared/ui/DataPanel';
@@ -13,9 +14,12 @@ import { Select } from '../../shared/ui/select';
 import { DashboardPageFrame } from '../../widgets/layout/DashboardPageFrame';
 
 export function SettingsPage() {
-  const { username } = useAuth();
+  const { token, username } = useAuth();
   const { theme, setTheme, timezone, setTimezone, tenant, window, density } = useUI();
   const [openShortcuts, setOpenShortcuts] = useState(false);
+  const tenantConsoleUrl =
+    token ? buildConsoleHandoffUrl(CONTROL_TENANT_URL, token, username) : CONTROL_TENANT_URL;
+  const opsConsoleUrl = token ? buildConsoleHandoffUrl(CONTROL_OPS_URL, token, username) : CONTROL_OPS_URL;
 
   return (
     <DashboardPageFrame chips={<Badge variant="info">density {density}</Badge>}>
@@ -71,10 +75,10 @@ export function SettingsPage() {
 
       <DataPanel title="Control Plane Consoles" description="Open dedicated tenant and operations consoles.">
         <div className="stack-sm">
-          <a href={CONTROL_TENANT_URL} target="_blank" rel="noreferrer">
+          <a href={tenantConsoleUrl} target="_blank" rel="noreferrer">
             Open Tenant Control Console
           </a>
-          <a href={CONTROL_OPS_URL} target="_blank" rel="noreferrer">
+          <a href={opsConsoleUrl} target="_blank" rel="noreferrer">
             Open Ops Control Console
           </a>
         </div>

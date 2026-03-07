@@ -37,8 +37,11 @@ describe('deriveSessionState', () => {
 
   it('returns ready for a valid JWT payload', () => {
     const token = createJwt({
+      sub: 'ops@example.com',
       tenant_id: 'tenant-alpha',
-      scopes: ['control:tenants:read', 'control:config:write']
+      roles: ['admin'],
+      scopes: ['control:tenants:read', 'control:config:write'],
+      exp: Math.floor(Date.now() / 1000) + 3600
     });
 
     expect(deriveSessionState(token, 'ops@example.com')).toEqual({

@@ -34,6 +34,16 @@ RABBITMQ_QUEUE_TYPE="${RABBITMQ_QUEUE_TYPE:-classic}"
 MODEL_DIR="${MODEL_DIR:-$ROOT_DIR/.local/models}"
 mkdir -p "$MODEL_DIR"
 
+apply_migrations() {
+  echo "Applying Alembic migrations..."
+  (
+    cd "$ROOT_DIR/backend"
+    DATABASE_URL="$POSTGRES_DSN" "$ROOT_DIR/.venv/bin/alembic" -c alembic.ini upgrade head >/dev/null
+  )
+}
+
+apply_migrations
+
 start_backend() {
   local name="$1"
   local service_dir="$2"

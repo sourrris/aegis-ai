@@ -3,7 +3,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { Navigate, NavLink, Route, Routes } from 'react-router-dom';
 
 import { ControlApiClient } from '../../packages/control-api-client/src/client';
-import type { ConfigAuditItemDTO, ConnectorCatalogItem, DeliveryLogItemDTO, TenantSummary } from '../../packages/control-api-client/src/types';
+import type {
+  ConfigAuditItemDTO,
+  ConnectorCatalogItem,
+  DeliveryLogItemDTO,
+  TenantSummary
+} from '../../packages/control-api-client/src/types';
+import { buildMonitoringLoginUrl } from '../../packages/control-auth/src/handoff';
 import {
   DEFAULT_LIMIT,
   MAX_LIMIT,
@@ -12,9 +18,26 @@ import {
   hasAllScopes,
   hasAnyScope,
   normalizeLimit,
+  readHandedOffSession,
   type SessionState
 } from './app-state';
-import { Badge, OpsShell, Panel } from './ui';
+import { getOpsPageMeta, OPS_HOME_PATH, OPS_PAGE_META } from './page-meta';
+import {
+  Badge,
+  Button,
+  ConsolePageFrame,
+  ControlShell,
+  DataPanel,
+  DensityToggle,
+  Input,
+  QueryStatus,
+  ScopeGate,
+  Select,
+  StatusBanner,
+  buttonClassName,
+  cn,
+  useDensityPreference
+} from './ui';
 
 const CONTROL_API_BASE_URL = import.meta.env.VITE_CONTROL_API_BASE_URL ?? 'http://control-api.localhost';
 const MONITORING_APP_URL = import.meta.env.VITE_MONITORING_APP_URL ?? 'http://app.localhost';
@@ -31,6 +54,10 @@ const OPS_SCOPE_RULES = {
 } as const;
 
 function getSessionState(): SessionState {
+  const handedOffSession = readHandedOffSession();
+  if (handedOffSession) {
+    return handedOffSession;
+  }
   const token = window.localStorage.getItem('risk_token');
   const username = window.localStorage.getItem('risk_username');
   return deriveSessionState(token, username);
@@ -55,21 +82,16 @@ async function refreshMonitoringSession(): Promise<SessionState | null> {
 
   const username = window.localStorage.getItem('risk_username');
   const session = deriveSessionState(payload.access_token, username);
-  if (session.status !== 'ready') {
+  if (session.status !== 'ready' || !session.token) {
     return null;
   }
 
-  const token = session.token;
-  if (!token) {
-    return null;
-  }
-
-  window.localStorage.setItem('risk_token', token);
+  window.localStorage.setItem('risk_token', session.token);
   if (session.username) {
     window.localStorage.setItem('risk_username', session.username);
   }
 
-  return { ...session, token };
+  return session;
 }
 
 function useSessionBootstrap(): BootstrapSessionState {
@@ -109,95 +131,95 @@ function useSessionBootstrap(): BootstrapSessionState {
   return state;
 }
 
+function statusVariant(status: string | null | undefined) {
+  if (status === 'active' || status === 'ok' || status === 'delivered') {
+    return 'success' as const;
+  }
+  if (status === 'suspended' || status === 'failed') {
+    return 'critical' as const;
+  }
+  if (status === 'pending' || status === 'partial') {
+    return 'warning' as const;
+  }
+  return 'neutral' as const;
+}
+
+function navigationLinkClassName(isActive: boolean) {
+  return cn('control-nav__link', isActive && 'control-nav__link--active');
+}
+
 function Navigation() {
   return (
-    <nav aria-label="Ops sections" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
-      <NavLink to="/ops/tenants">Tenants</NavLink>
-      <NavLink to="/ops/connectors">Connectors</NavLink>
-      <NavLink to="/ops/delivery">Delivery</NavLink>
-      <NavLink to="/ops/audit">Audit</NavLink>
+    <nav className="control-nav" aria-label="Ops sections">
+      {OPS_PAGE_META.map((item) => (
+        <NavLink key={item.path} to={item.path} className={({ isActive }) => navigationLinkClassName(isActive)}>
+          {item.label}
+        </NavLink>
+      ))}
     </nav>
-  );
-}
-
-function QueryStatus({
-  state,
-  subject,
-  error
-}: {
-  state: 'loading' | 'error' | 'empty';
-  subject: string;
-  error?: string;
-}) {
-  const message =
-    state === 'loading'
-      ? `Loading ${subject}.`
-      : state === 'empty'
-        ? `No ${subject} available yet.`
-        : `Unable to load ${subject}.`;
-
-  return (
-    <div aria-live="polite" data-testid={`${subject.replace(/\s+/g, '-').toLowerCase()}-${state}`}>
-      <p>{message}</p>
-      {state === 'error' && error ? <p style={{ color: '#b91c1c' }}>{error}</p> : null}
-    </div>
-  );
-}
-
-function ScopeGate({
-  allowed,
-  title,
-  message,
-  children
-}: {
-  allowed: boolean;
-  title: string;
-  message: string;
-  children: JSX.Element;
-}) {
-  if (allowed) {
-    return children;
-  }
-
-  return (
-    <Panel title={title}>
-      <p data-testid="scope-gate-message">{message}</p>
-    </Panel>
   );
 }
 
 function EnvironmentChecklist() {
   const checks = [
-    'Reverse proxy is running and resolves ops-control.localhost, control.localhost, and control-api.localhost.',
+    'Reverse proxy resolves ops-control.localhost, control.localhost, and control-api.localhost.',
     'The ops console frontend responds at http://ops-control.localhost.',
     'The control API responds at http://control-api.localhost/health/live.',
     'Browser storage contains a valid risk_token and optional risk_username for authenticated flows.'
   ];
 
   return (
-    <Panel title="Playwright Preflight">
-      <ul data-testid="preflight-checklist" style={{ margin: 0, paddingLeft: 18 }}>
+    <DataPanel title="Playwright Preflight" description="Quick checks for local operator and browser automation flows.">
+      <ul className="control-list" data-testid="preflight-checklist">
         {checks.map((check) => (
-          <li key={check}>{check}</li>
+          <li key={check} className="control-list__item">
+            <span>{check}</span>
+          </li>
         ))}
       </ul>
-    </Panel>
+    </DataPanel>
   );
 }
 
 function AuthRequiredPanel({ invalidSession }: { invalidSession: boolean }) {
   return (
-    <Panel title="Authentication Required">
-      <p data-testid="auth-required-message">
+    <DataPanel title="Authentication Required" description="This console reuses the shared monitoring session.">
+      <p data-testid="auth-required-message" className="muted">
         {invalidSession
           ? 'The saved session is invalid or expired. Sign in again through the monitoring app.'
           : 'Sign in through the monitoring app first. This console reuses the same JWT session.'}
       </p>
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <a href={`${MONITORING_APP_URL}/login`}>Open Monitoring Login</a>
-        <a href={TENANT_CONSOLE_URL}>Open Tenant Console</a>
+      <div className="control-responsive-actions">
+        <a className={buttonClassName('primary')} href={buildMonitoringLoginUrl(MONITORING_APP_URL, window.location.href)}>
+          Open Monitoring Login
+        </a>
+        <a className={buttonClassName('secondary')} href={TENANT_CONSOLE_URL}>
+          Open Tenant Console
+        </a>
       </div>
-    </Panel>
+    </DataPanel>
+  );
+}
+
+function SessionCapabilities({ scopes }: { scopes: string[] }) {
+  return (
+    <DataPanel
+      title="Session Capabilities"
+      description="Current token scopes available to this operator session."
+      badge={<Badge variant={scopes.length > 0 ? 'success' : 'warning'}>{scopes.length} scopes</Badge>}
+    >
+      {scopes.length > 0 ? (
+        <div className="control-chip-row">
+          {scopes.map((scope) => (
+            <Badge key={scope} variant="info">
+              {scope}
+            </Badge>
+          ))}
+        </div>
+      ) : (
+        <p className="muted">No scopes found.</p>
+      )}
+    </DataPanel>
   );
 }
 
@@ -213,39 +235,44 @@ function TenantsTable({
   allowWrite: boolean;
 }) {
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-      <thead>
-        <tr>
-          <th align="left">Tenant</th>
-          <th align="left">Display Name</th>
-          <th align="left">Tier</th>
-          <th align="left">Status</th>
-          <th align="left">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {tenants.map((tenant) => (
-          <tr key={tenant.tenant_id} style={{ borderTop: '1px solid #e2e8f0' }}>
-            <td>{tenant.tenant_id}</td>
-            <td>{tenant.display_name}</td>
-            <td>{tenant.tier}</td>
-            <td>
-              {tenant.status}
-              <Badge value={tenant.status === 'active' ? 'healthy' : 'attention'} />
-            </td>
-            <td>
-              <button
-                onClick={() => onToggleStatus(tenant)}
-                disabled={!allowWrite || togglePending}
-                title={allowWrite ? undefined : 'Requires control:tenants:write'}
-              >
-                {tenant.status === 'active' ? 'Suspend' : 'Activate'}
-              </button>
-            </td>
+    <div className="control-table-wrap">
+      <table className="control-table">
+        <thead>
+          <tr>
+            <th scope="col">Tenant</th>
+            <th scope="col">Display Name</th>
+            <th scope="col">Tier</th>
+            <th scope="col">Status</th>
+            <th scope="col">Actions</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {tenants.map((tenant) => (
+            <tr key={tenant.tenant_id}>
+              <td className="mono">{tenant.tenant_id}</td>
+              <td>{tenant.display_name}</td>
+              <td>
+                <Badge variant="neutral">{tenant.tier}</Badge>
+              </td>
+              <td>
+                <Badge variant={statusVariant(tenant.status)}>{tenant.status}</Badge>
+              </td>
+              <td>
+                <div className="control-inline-actions">
+                  <Button
+                    onClick={() => onToggleStatus(tenant)}
+                    disabled={!allowWrite || togglePending}
+                    title={allowWrite ? undefined : 'Requires control:tenants:write'}
+                  >
+                    {tenant.status === 'active' ? 'Suspend' : 'Activate'}
+                  </Button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -263,7 +290,6 @@ function TenantsPage({ client, scopes }: { client: ControlApiClient; scopes: str
   const [displayName, setDisplayName] = useState('');
   const [tier, setTier] = useState('standard');
   const [status, setStatus] = useState('active');
-
   const [adminTenant, setAdminTenant] = useState('');
   const [adminUsername, setAdminUsername] = useState('');
   const [adminRole, setAdminRole] = useState('admin');
@@ -302,68 +328,117 @@ function TenantsPage({ client, scopes }: { client: ControlApiClient; scopes: str
     onSuccess: () => {
       setAdminTenant('');
       setAdminUsername('');
+      setAdminRole('admin');
     }
   });
 
+  const meta = getOpsPageMeta('/ops/tenants');
+
   return (
-    <ScopeGate
-      allowed={canRead}
-      title="Tenant Operations Restricted"
-      message="This session is missing control:tenants:read, so tenant data cannot be shown."
+    <ConsolePageFrame
+      title={meta.title}
+      subtitle={meta.subtitle}
+      chips={<Badge variant={canWrite ? 'success' : 'warning'}>{canWrite ? 'write enabled' : 'read only'}</Badge>}
     >
-      <>
-        <Panel title="Tenant Lifecycle">
-          <p>Create or suspend tenants from the control plane without direct DB access.</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(150px, 1fr))', gap: 10 }}>
-            <input value={tenantId} onChange={(event) => setTenantId(event.target.value)} placeholder="tenant-gamma" />
-            <input
-              value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
-              placeholder="Gamma Bank"
-            />
-            <input value={tier} onChange={(event) => setTier(event.target.value)} placeholder="enterprise" />
-            <select value={status} onChange={(event) => setStatus(event.target.value)}>
-              <option value="active">active</option>
-              <option value="suspended">suspended</option>
-            </select>
-          </div>
-          <button
-            style={{ marginTop: 10 }}
-            onClick={() => createMutation.mutate()}
-            disabled={createMutation.isPending || !canWrite || !tenantId.trim() || !displayName.trim() || !tier.trim()}
-            title={canWrite ? undefined : 'Requires control:tenants:write'}
-          >
-            {createMutation.isPending ? 'Creating...' : 'Create Tenant'}
-          </button>
-          {createMutation.isError ? <p style={{ color: '#b91c1c' }}>{(createMutation.error as Error).message}</p> : null}
-        </Panel>
+      <ScopeGate
+        allowed={canRead}
+        title="Tenant Operations Restricted"
+        message="This session is missing control:tenants:read, so tenant data cannot be shown."
+      >
+        <div className="control-grid-two">
+          <DataPanel title="Tenant Lifecycle" description="Create or suspend tenant workspaces from the control plane.">
+            <div className="control-field-grid control-field-grid--four">
+              <div className="control-field">
+                <label htmlFor="tenant-id">Tenant ID</label>
+                <Input id="tenant-id" value={tenantId} onChange={(event) => setTenantId(event.target.value)} placeholder="tenant-gamma" />
+              </div>
+              <div className="control-field">
+                <label htmlFor="tenant-name">Display name</label>
+                <Input
+                  id="tenant-name"
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  placeholder="Gamma Bank"
+                />
+              </div>
+              <div className="control-field">
+                <label htmlFor="tenant-tier">Tier</label>
+                <Input id="tenant-tier" value={tier} onChange={(event) => setTier(event.target.value)} placeholder="enterprise" />
+              </div>
+              <div className="control-field">
+                <label htmlFor="tenant-status">Status</label>
+                <Select id="tenant-status" value={status} onChange={(event) => setStatus(event.target.value)}>
+                  <option value="active">active</option>
+                  <option value="suspended">suspended</option>
+                </Select>
+              </div>
+            </div>
 
-        <Panel title="Assign Tenant Admin">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(180px, 1fr))', gap: 10 }}>
-            <input
-              value={adminTenant}
-              onChange={(event) => setAdminTenant(event.target.value)}
-              placeholder="tenant-gamma"
-            />
-            <input
-              value={adminUsername}
-              onChange={(event) => setAdminUsername(event.target.value)}
-              placeholder="user@example.com"
-            />
-            <input value={adminRole} onChange={(event) => setAdminRole(event.target.value)} placeholder="admin" />
-          </div>
-          <button
-            style={{ marginTop: 10 }}
-            onClick={() => assignMutation.mutate()}
-            disabled={assignMutation.isPending || !canWrite || !adminTenant.trim() || !adminUsername.trim() || !adminRole.trim()}
-            title={canWrite ? undefined : 'Requires control:tenants:write'}
-          >
-            {assignMutation.isPending ? 'Assigning...' : 'Assign Admin'}
-          </button>
-          {assignMutation.isError ? <p style={{ color: '#b91c1c' }}>{(assignMutation.error as Error).message}</p> : null}
-        </Panel>
+            <div className="control-responsive-actions">
+              <Button
+                variant="primary"
+                onClick={() => createMutation.mutate()}
+                disabled={createMutation.isPending || !canWrite || !tenantId.trim() || !displayName.trim() || !tier.trim()}
+                title={canWrite ? undefined : 'Requires control:tenants:write'}
+              >
+                {createMutation.isPending ? 'Creating...' : 'Create Tenant'}
+              </Button>
+            </div>
 
-        <Panel title="Tenant Directory">
+            {createMutation.isError ? (
+              <StatusBanner variant="error">{(createMutation.error as Error).message}</StatusBanner>
+            ) : null}
+          </DataPanel>
+
+          <DataPanel title="Assign Tenant Admin" description="Delegate an initial administrator to a tenant workspace.">
+            <div className="control-field-grid control-field-grid--three">
+              <div className="control-field">
+                <label htmlFor="admin-tenant">Tenant</label>
+                <Input
+                  id="admin-tenant"
+                  value={adminTenant}
+                  onChange={(event) => setAdminTenant(event.target.value)}
+                  placeholder="tenant-gamma"
+                />
+              </div>
+              <div className="control-field">
+                <label htmlFor="admin-username">Username</label>
+                <Input
+                  id="admin-username"
+                  value={adminUsername}
+                  onChange={(event) => setAdminUsername(event.target.value)}
+                  placeholder="user@example.com"
+                />
+              </div>
+              <div className="control-field">
+                <label htmlFor="admin-role">Role</label>
+                <Input
+                  id="admin-role"
+                  value={adminRole}
+                  onChange={(event) => setAdminRole(event.target.value)}
+                  placeholder="admin"
+                />
+              </div>
+            </div>
+
+            <div className="control-responsive-actions">
+              <Button
+                variant="secondary"
+                onClick={() => assignMutation.mutate()}
+                disabled={assignMutation.isPending || !canWrite || !adminTenant.trim() || !adminUsername.trim() || !adminRole.trim()}
+                title={canWrite ? undefined : 'Requires control:tenants:write'}
+              >
+                {assignMutation.isPending ? 'Assigning...' : 'Assign Admin'}
+              </Button>
+            </div>
+
+            {assignMutation.isError ? (
+              <StatusBanner variant="error">{(assignMutation.error as Error).message}</StatusBanner>
+            ) : null}
+          </DataPanel>
+        </div>
+
+        <DataPanel title="Tenant Directory" description="Current tenants and lifecycle status across the control plane.">
           {tenantsQuery.isPending ? <QueryStatus state="loading" subject="tenant directory" /> : null}
           {tenantsQuery.isError ? (
             <QueryStatus state="error" subject="tenant directory" error={(tenantsQuery.error as Error).message} />
@@ -382,10 +457,10 @@ function TenantsPage({ client, scopes }: { client: ControlApiClient; scopes: str
               allowWrite={canWrite}
             />
           ) : null}
-          {updateMutation.isError ? <p style={{ color: '#b91c1c' }}>{(updateMutation.error as Error).message}</p> : null}
-        </Panel>
-      </>
-    </ScopeGate>
+          {updateMutation.isError ? <StatusBanner variant="error">{(updateMutation.error as Error).message}</StatusBanner> : null}
+        </DataPanel>
+      </ScopeGate>
+    </ConsolePageFrame>
   );
 }
 
@@ -405,43 +480,52 @@ function ConnectorsTable({
   onToggle: (sourceName: string, enabled: boolean) => void;
 }) {
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-      <thead>
-        <tr>
-          <th align="left">Source</th>
-          <th align="left">Type</th>
-          <th align="left">Enabled</th>
-          <th align="left">Last Status</th>
-          <th align="left">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {connectors.map((connector) => (
-          <tr key={connector.source_name} style={{ borderTop: '1px solid #e2e8f0' }}>
-            <td>{connector.source_name}</td>
-            <td>{connector.source_type}</td>
-            <td>{connector.enabled ? 'yes' : 'no'}</td>
-            <td>{connector.latest_status ?? 'n/a'}</td>
-            <td style={{ display: 'flex', gap: 8, padding: '10px 0' }}>
-              <button
-                onClick={() => onRunNow(connector.source_name)}
-                disabled={!canWrite || runPending}
-                title={canWrite ? undefined : 'Requires control:config:write'}
-              >
-                Run Now
-              </button>
-              <button
-                onClick={() => onToggle(connector.source_name, !connector.enabled)}
-                disabled={!canWrite || togglePending}
-                title={canWrite ? undefined : 'Requires control:config:write'}
-              >
-                {connector.enabled ? 'Disable' : 'Enable'}
-              </button>
-            </td>
+    <div className="control-table-wrap">
+      <table className="control-table">
+        <thead>
+          <tr>
+            <th scope="col">Source</th>
+            <th scope="col">Type</th>
+            <th scope="col">Enabled</th>
+            <th scope="col">Last Status</th>
+            <th scope="col">Actions</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {connectors.map((connector) => (
+            <tr key={connector.source_name}>
+              <td className="mono">{connector.source_name}</td>
+              <td>{connector.source_type}</td>
+              <td>
+                <Badge variant={connector.enabled ? 'success' : 'warning'}>{connector.enabled ? 'yes' : 'no'}</Badge>
+              </td>
+              <td>
+                <Badge variant={statusVariant(connector.latest_status)}>{connector.latest_status ?? 'n/a'}</Badge>
+              </td>
+              <td>
+                <div className="control-inline-actions">
+                  <Button
+                    onClick={() => onRunNow(connector.source_name)}
+                    disabled={!canWrite || runPending}
+                    title={canWrite ? undefined : 'Requires control:config:write'}
+                  >
+                    Run Now
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => onToggle(connector.source_name, !connector.enabled)}
+                    disabled={!canWrite || togglePending}
+                    title={canWrite ? undefined : 'Requires control:config:write'}
+                  >
+                    {connector.enabled ? 'Disable' : 'Enable'}
+                  </Button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -454,7 +538,6 @@ function ConnectorsPage({ client, scopes }: { client: ControlApiClient; scopes: 
     queryFn: () => client.listConnectorsCatalog(),
     enabled: canRead
   });
-
   const [lastAction, setLastAction] = useState('');
 
   const runNowMutation = useMutation({
@@ -474,65 +557,82 @@ function ConnectorsPage({ client, scopes }: { client: ControlApiClient; scopes: 
     }
   });
 
+  const meta = getOpsPageMeta('/ops/connectors');
+
   return (
-    <ScopeGate
-      allowed={canRead}
-      title="Connector Operations Restricted"
-      message="This session is missing control:config:read, so connector status cannot be shown."
+    <ConsolePageFrame
+      title={meta.title}
+      subtitle={meta.subtitle}
+      chips={<Badge variant={canWrite ? 'success' : 'warning'}>{canWrite ? 'write enabled' : 'read only'}</Badge>}
     >
-      <Panel title="Global Connector Operations">
-        {lastAction ? <p data-testid="connector-last-action">{lastAction}</p> : null}
-        {catalogQuery.isPending ? <QueryStatus state="loading" subject="connector catalog" /> : null}
-        {catalogQuery.isError ? (
-          <QueryStatus state="error" subject="connector catalog" error={(catalogQuery.error as Error).message} />
-        ) : null}
-        {catalogQuery.data && catalogQuery.data.length === 0 ? <QueryStatus state="empty" subject="connector catalog" /> : null}
-        {catalogQuery.data && catalogQuery.data.length > 0 ? (
-          <ConnectorsTable
-            connectors={catalogQuery.data}
-            canWrite={canWrite}
-            runPending={runNowMutation.isPending}
-            togglePending={toggleMutation.isPending}
-            onRunNow={(sourceName) => runNowMutation.mutate(sourceName)}
-            onToggle={(sourceName, enabled) => toggleMutation.mutate({ sourceName, enabled })}
-          />
-        ) : null}
-        {runNowMutation.isError || toggleMutation.isError ? (
-          <p style={{ color: '#b91c1c' }}>
-            {((runNowMutation.error ?? toggleMutation.error) as Error).message}
-          </p>
-        ) : null}
-      </Panel>
-    </ScopeGate>
+      <ScopeGate
+        allowed={canRead}
+        title="Connector Operations Restricted"
+        message="This session is missing control:config:read, so connector status cannot be shown."
+      >
+        <DataPanel
+          title="Global Connector Operations"
+          description="Manage global feed availability and dispatch run-now actions without leaving the console."
+        >
+          {lastAction ? (
+            <StatusBanner variant="success" data-testid="connector-last-action">
+              {lastAction}
+            </StatusBanner>
+          ) : null}
+          {catalogQuery.isPending ? <QueryStatus state="loading" subject="connector catalog" /> : null}
+          {catalogQuery.isError ? (
+            <QueryStatus state="error" subject="connector catalog" error={(catalogQuery.error as Error).message} />
+          ) : null}
+          {catalogQuery.data && catalogQuery.data.length === 0 ? <QueryStatus state="empty" subject="connector catalog" /> : null}
+          {catalogQuery.data && catalogQuery.data.length > 0 ? (
+            <ConnectorsTable
+              connectors={catalogQuery.data}
+              canWrite={canWrite}
+              runPending={runNowMutation.isPending}
+              togglePending={toggleMutation.isPending}
+              onRunNow={(sourceName) => runNowMutation.mutate(sourceName)}
+              onToggle={(sourceName, enabled) => toggleMutation.mutate({ sourceName, enabled })}
+            />
+          ) : null}
+          {runNowMutation.isError || toggleMutation.isError ? (
+            <StatusBanner variant="error">{((runNowMutation.error ?? toggleMutation.error) as Error).message}</StatusBanner>
+          ) : null}
+        </DataPanel>
+      </ScopeGate>
+    </ConsolePageFrame>
   );
 }
 
 function DeliveryTable({ rows }: { rows: DeliveryLogItemDTO[] }) {
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-      <thead>
-        <tr>
-          <th align="left">Tenant</th>
-          <th align="left">Channel</th>
-          <th align="left">Status</th>
-          <th align="left">Attempt</th>
-          <th align="left">Time</th>
-          <th align="left">Error</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => (
-          <tr key={row.delivery_id} style={{ borderTop: '1px solid #e2e8f0' }}>
-            <td>{row.tenant_id}</td>
-            <td>{row.channel}</td>
-            <td>{row.status}</td>
-            <td>{row.attempt_no}</td>
-            <td>{new Date(row.attempted_at).toLocaleString()}</td>
-            <td>{row.error_message ?? '-'}</td>
+    <div className="control-table-wrap">
+      <table className="control-table">
+        <thead>
+          <tr>
+            <th scope="col">Tenant</th>
+            <th scope="col">Channel</th>
+            <th scope="col">Status</th>
+            <th scope="col">Attempt</th>
+            <th scope="col">Time</th>
+            <th scope="col">Error</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.delivery_id}>
+              <td className="mono">{row.tenant_id}</td>
+              <td>{row.channel}</td>
+              <td>
+                <Badge variant={statusVariant(row.status)}>{row.status}</Badge>
+              </td>
+              <td>{row.attempt_no}</td>
+              <td>{new Date(row.attempted_at).toLocaleString()}</td>
+              <td>{row.error_message ?? '-'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -552,66 +652,85 @@ function DeliveryPage({ client, scopes }: { client: ControlApiClient; scopes: st
     enabled: canRead
   });
 
+  const meta = getOpsPageMeta('/ops/delivery');
+
   return (
-    <ScopeGate
-      allowed={canRead}
-      title="Delivery Logs Restricted"
-      message="This session is missing control:routing:read, so delivery logs cannot be shown."
+    <ConsolePageFrame
+      title={meta.title}
+      subtitle={meta.subtitle}
+      chips={<Badge variant={canRead ? 'info' : 'warning'}>{canRead ? 'routing read' : 'restricted'}</Badge>}
     >
-      <Panel title="Cross-Tenant Delivery Logs">
-        <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-          <input
-            value={tenantFilter}
-            onChange={(event) => setTenantFilter(event.target.value)}
-            placeholder="tenant filter (optional)"
-          />
-          <input
-            value={limitInput}
-            type="number"
-            min={MIN_LIMIT}
-            max={MAX_LIMIT}
-            onChange={(event) => setLimitInput(event.target.value)}
-            style={{ width: 120 }}
-          />
-        </div>
-        <p className="muted" data-testid="delivery-limit-summary">
-          Requesting up to {limit} delivery records per fetch.
-        </p>
-        {deliveryQuery.isPending ? <QueryStatus state="loading" subject="delivery logs" /> : null}
-        {deliveryQuery.isError ? (
-          <QueryStatus state="error" subject="delivery logs" error={(deliveryQuery.error as Error).message} />
-        ) : null}
-        {deliveryQuery.data && deliveryQuery.data.length === 0 ? <QueryStatus state="empty" subject="delivery logs" /> : null}
-        {deliveryQuery.data && deliveryQuery.data.length > 0 ? <DeliveryTable rows={deliveryQuery.data} /> : null}
-      </Panel>
-    </ScopeGate>
+      <ScopeGate
+        allowed={canRead}
+        title="Delivery Logs Restricted"
+        message="This session is missing control:routing:read, so delivery logs cannot be shown."
+      >
+        <DataPanel title="Cross-Tenant Delivery Logs" description="Filter recent alert deliveries across tenant destinations.">
+          <div className="control-field-grid">
+            <div className="control-field">
+              <label htmlFor="delivery-tenant-filter">Tenant filter</label>
+              <Input
+                id="delivery-tenant-filter"
+                value={tenantFilter}
+                onChange={(event) => setTenantFilter(event.target.value)}
+                placeholder="tenant filter (optional)"
+              />
+            </div>
+            <div className="control-field">
+              <label htmlFor="delivery-limit">Limit</label>
+              <Input
+                id="delivery-limit"
+                value={limitInput}
+                type="number"
+                min={MIN_LIMIT}
+                max={MAX_LIMIT}
+                onChange={(event) => setLimitInput(event.target.value)}
+              />
+            </div>
+          </div>
+
+          <p className="muted" data-testid="delivery-limit-summary">
+            Requesting up to {limit} delivery records per fetch.
+          </p>
+
+          {deliveryQuery.isPending ? <QueryStatus state="loading" subject="delivery logs" /> : null}
+          {deliveryQuery.isError ? (
+            <QueryStatus state="error" subject="delivery logs" error={(deliveryQuery.error as Error).message} />
+          ) : null}
+          {deliveryQuery.data && deliveryQuery.data.length === 0 ? <QueryStatus state="empty" subject="delivery logs" /> : null}
+          {deliveryQuery.data && deliveryQuery.data.length > 0 ? <DeliveryTable rows={deliveryQuery.data} /> : null}
+        </DataPanel>
+      </ScopeGate>
+    </ConsolePageFrame>
   );
 }
 
 function AuditTable({ rows }: { rows: ConfigAuditItemDTO[] }) {
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-      <thead>
-        <tr>
-          <th align="left">When</th>
-          <th align="left">Actor</th>
-          <th align="left">Tenant</th>
-          <th align="left">Action</th>
-          <th align="left">Resource</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => (
-          <tr key={row.id} style={{ borderTop: '1px solid #e2e8f0' }}>
-            <td>{new Date(row.created_at).toLocaleString()}</td>
-            <td>{row.actor}</td>
-            <td>{row.tenant_id ?? 'global'}</td>
-            <td>{row.action}</td>
-            <td>{row.resource_type}</td>
+    <div className="control-table-wrap">
+      <table className="control-table">
+        <thead>
+          <tr>
+            <th scope="col">When</th>
+            <th scope="col">Actor</th>
+            <th scope="col">Tenant</th>
+            <th scope="col">Action</th>
+            <th scope="col">Resource</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id}>
+              <td>{new Date(row.created_at).toLocaleString()}</td>
+              <td>{row.actor}</td>
+              <td>{row.tenant_id ?? 'global'}</td>
+              <td>{row.action}</td>
+              <td>{row.resource_type}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -631,44 +750,62 @@ function AuditPage({ client, scopes }: { client: ControlApiClient; scopes: strin
     enabled: canRead
   });
 
+  const meta = getOpsPageMeta('/ops/audit');
+
   return (
-    <ScopeGate
-      allowed={canRead}
-      title="Audit Trail Restricted"
-      message="This session is missing control:tenants:read or control:config:read, so config audit history cannot be shown."
+    <ConsolePageFrame
+      title={meta.title}
+      subtitle={meta.subtitle}
+      chips={<Badge variant={canRead ? 'info' : 'warning'}>{canRead ? 'audit enabled' : 'restricted'}</Badge>}
     >
-      <Panel title="Configuration Audit Trail">
-        <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-          <input
-            value={tenantFilter}
-            onChange={(event) => setTenantFilter(event.target.value)}
-            placeholder="tenant filter (optional)"
-          />
-          <input
-            value={limitInput}
-            type="number"
-            min={MIN_LIMIT}
-            max={MAX_LIMIT}
-            onChange={(event) => setLimitInput(event.target.value)}
-            style={{ width: 120 }}
-          />
-        </div>
-        <p className="muted" data-testid="audit-limit-summary">
-          Requesting up to {limit} audit records per fetch.
-        </p>
-        {auditQuery.isPending ? <QueryStatus state="loading" subject="audit trail" /> : null}
-        {auditQuery.isError ? (
-          <QueryStatus state="error" subject="audit trail" error={(auditQuery.error as Error).message} />
-        ) : null}
-        {auditQuery.data && auditQuery.data.length === 0 ? <QueryStatus state="empty" subject="audit trail" /> : null}
-        {auditQuery.data && auditQuery.data.length > 0 ? <AuditTable rows={auditQuery.data} /> : null}
-      </Panel>
-    </ScopeGate>
+      <ScopeGate
+        allowed={canRead}
+        title="Audit Trail Restricted"
+        message="This session is missing control:tenants:read or control:config:read, so config audit history cannot be shown."
+      >
+        <DataPanel title="Configuration Audit Trail" description="Search and inspect recent control-plane config mutations.">
+          <div className="control-field-grid">
+            <div className="control-field">
+              <label htmlFor="audit-tenant-filter">Tenant filter</label>
+              <Input
+                id="audit-tenant-filter"
+                value={tenantFilter}
+                onChange={(event) => setTenantFilter(event.target.value)}
+                placeholder="tenant filter (optional)"
+              />
+            </div>
+            <div className="control-field">
+              <label htmlFor="audit-limit">Limit</label>
+              <Input
+                id="audit-limit"
+                value={limitInput}
+                type="number"
+                min={MIN_LIMIT}
+                max={MAX_LIMIT}
+                onChange={(event) => setLimitInput(event.target.value)}
+              />
+            </div>
+          </div>
+
+          <p className="muted" data-testid="audit-limit-summary">
+            Requesting up to {limit} audit records per fetch.
+          </p>
+
+          {auditQuery.isPending ? <QueryStatus state="loading" subject="audit trail" /> : null}
+          {auditQuery.isError ? (
+            <QueryStatus state="error" subject="audit trail" error={(auditQuery.error as Error).message} />
+          ) : null}
+          {auditQuery.data && auditQuery.data.length === 0 ? <QueryStatus state="empty" subject="audit trail" /> : null}
+          {auditQuery.data && auditQuery.data.length > 0 ? <AuditTable rows={auditQuery.data} /> : null}
+        </DataPanel>
+      </ScopeGate>
+    </ConsolePageFrame>
   );
 }
 
 export function App() {
   const { status, token, username, tenantId, scopes } = useSessionBootstrap();
+  const [density, setDensity] = useDensityPreference('control_ops_density');
 
   const client = useMemo(() => {
     if (!token) {
@@ -677,55 +814,71 @@ export function App() {
     return new ControlApiClient(CONTROL_API_BASE_URL, token);
   }, [token]);
 
+  const brand = (
+    <NavLink to={OPS_HOME_PATH} className="control-brand">
+      <span className="control-brand__mark">ops</span>
+      <span className="control-brand__copy">
+        <span className="control-brand__eyebrow">Control Plane</span>
+        <span className="control-brand__name">Aegis Operations Console</span>
+      </span>
+    </NavLink>
+  );
+
   if (status === 'loading') {
     return (
-      <OpsShell title="Authentication Required">
+      <ControlShell brand={brand}>
         <EnvironmentChecklist />
-        <Panel title="Checking Monitoring Session">
-          <p>Verifying the shared monitoring sign-in before opening the ops console.</p>
-        </Panel>
-      </OpsShell>
+        <DataPanel title="Checking Monitoring Session" description="Verifying the shared monitoring sign-in before opening the ops console.">
+          <p className="muted">Verifying the shared monitoring sign-in before opening the ops console.</p>
+        </DataPanel>
+      </ControlShell>
     );
   }
 
   if (!client || status !== 'ready') {
     return (
-      <OpsShell title="Authentication Required">
+      <ControlShell brand={brand}>
         <EnvironmentChecklist />
         <AuthRequiredPanel invalidSession={status === 'invalid'} />
-      </OpsShell>
+      </ControlShell>
     );
   }
 
   return (
-    <OpsShell
-      title="Operations Control Plane"
+    <ControlShell
+      brand={brand}
+      navigation={<Navigation />}
       actions={
-        <div style={{ display: 'flex', gap: 12 }}>
-          <span>
+        <>
+          <span className="control-inline-meta">
             {username ?? 'operator'} · {tenantId}
           </span>
-          <a href={TENANT_CONSOLE_URL}>Open Tenant Console</a>
-          <a href={MONITORING_APP_URL}>Open Monitoring App</a>
+          <a className={buttonClassName('ghost')} href={TENANT_CONSOLE_URL}>
+            Open Tenant Console
+          </a>
+          <a className={buttonClassName('ghost')} href={MONITORING_APP_URL}>
+            Open Monitoring App
+          </a>
+        </>
+      }
+      utilityBar={
+        <div className="control-responsive-actions">
+          <Badge variant="success">session ready</Badge>
+          <Badge variant="info">{tenantId}</Badge>
+          <Badge variant={scopes.length > 0 ? 'success' : 'warning'}>{scopes.length} scopes</Badge>
+          <DensityToggle value={density} onChange={setDensity} />
         </div>
       }
     >
-      <EnvironmentChecklist />
-      <Panel title="Session Capabilities">
-        <p>Current token scopes:</p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {scopes.length > 0 ? scopes.map((scope) => <Badge key={scope} value={scope} />) : <span>No scopes found.</span>}
-        </div>
-      </Panel>
-      <Navigation />
+      <SessionCapabilities scopes={scopes} />
       <Routes>
-        <Route path="/" element={<Navigate to="/ops/tenants" replace />} />
+        <Route path="/" element={<Navigate to={OPS_HOME_PATH} replace />} />
         <Route path="/ops/tenants" element={<TenantsPage client={client} scopes={scopes} />} />
         <Route path="/ops/connectors" element={<ConnectorsPage client={client} scopes={scopes} />} />
         <Route path="/ops/delivery" element={<DeliveryPage client={client} scopes={scopes} />} />
         <Route path="/ops/audit" element={<AuditPage client={client} scopes={scopes} />} />
-        <Route path="*" element={<Navigate to="/ops/tenants" replace />} />
+        <Route path="*" element={<Navigate to={OPS_HOME_PATH} replace />} />
       </Routes>
-    </OpsShell>
+    </ControlShell>
   );
 }

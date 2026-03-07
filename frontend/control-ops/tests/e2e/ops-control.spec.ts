@@ -26,6 +26,7 @@ test.describe('ops control console', () => {
   test('shows the auth-required shell when no session exists', async ({ page }) => {
     await page.goto('/');
 
+    await expect(page.getByText('Aegis Operations Console')).toBeVisible();
     await expect(page.getByText('Playwright Preflight')).toBeVisible();
     await expect(page.getByTestId('auth-required-message')).toContainText('Sign in through the monitoring app first');
     await expect(page.getByRole('link', { name: 'Open Monitoring Login' })).toBeVisible();
@@ -160,7 +161,9 @@ test.describe('ops control console', () => {
 
     await page.goto('/');
 
-    await expect(page.getByText('Operations Control Plane')).toBeVisible();
+    await expect(page.getByText('Aegis Operations Console')).toBeVisible();
+    await expect(page.getByText('Session Capabilities')).toBeVisible();
+    await expect(page.getByText('Tenant Operations')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Tenants' })).toBeVisible();
     await expect(page.getByText('Alpha Bank')).toBeVisible();
 

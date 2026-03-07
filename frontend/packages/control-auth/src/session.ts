@@ -37,11 +37,19 @@ export function parseAuthSession(token: string | null, username: string | null):
   if (!payload) {
     return { token: null, username: null, tenantId: null, scopes: [] };
   }
-  const tenantId = typeof payload?.tenant_id === 'string' ? payload.tenant_id : null;
+  const subject = typeof payload?.sub === 'string' ? payload.sub.trim() : '';
+  const tenantId = typeof payload?.tenant_id === 'string' ? payload.tenant_id.trim() : null;
+  const roles = Array.isArray(payload?.roles) ? payload.roles.filter((item): item is string => typeof item === 'string') : [];
+  const exp = typeof payload?.exp === 'number' ? payload.exp : null;
   const scopes = Array.isArray(payload?.scopes) ? payload.scopes.filter((s): s is string => typeof s === 'string') : [];
+
+  if (!subject || !tenantId || !exp || exp * 1000 <= Date.now() || roles.length === 0) {
+    return { token: null, username: null, tenantId: null, scopes: [] };
+  }
+
   return {
     token,
-    username,
+    username: username ?? subject,
     tenantId,
     scopes
   };
