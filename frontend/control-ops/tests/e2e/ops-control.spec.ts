@@ -5,8 +5,11 @@ const CONTROL_API_BASE_URL = 'http://control-api.localhost';
 function createJwt(scopes: string[], tenantId = 'all'): string {
   const encoded = Buffer.from(
     JSON.stringify({
+      sub: 'ops@example.com',
       tenant_id: tenantId,
-      scopes
+      scopes,
+      roles: ['ops'],
+      exp: Math.floor(Date.now() / 1000) + 60 * 60
     })
   ).toString('base64url');
   return `header.${encoded}.signature`;
@@ -176,7 +179,7 @@ test.describe('ops control console', () => {
     await expect(page.getByText('delivered')).toBeVisible();
 
     await page.getByRole('link', { name: 'Audit' }).click();
-    await expect(page.getByText('Configuration Audit Trail')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Configuration Audit Trail' }).first()).toBeVisible();
     await expect(page.getByText('ops@example.com')).toBeVisible();
   });
 

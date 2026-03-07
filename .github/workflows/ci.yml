@@ -83,6 +83,11 @@ jobs:
           npm install --prefix frontend/control-tenant
           npm install --prefix frontend/control-ops
 
+      - name: Install Playwright browser
+        run: |
+          cd frontend/control-ops
+          npx playwright install --with-deps chromium
+
       - name: Frontend quality checks
         run: |
           npm test --prefix frontend/dashboard
@@ -91,6 +96,16 @@ jobs:
           npm run build --prefix frontend/control-tenant
           npm run lint --prefix frontend/control-ops
           npm run build --prefix frontend/control-ops
+
+      - name: Ops control browser smoke
+        run: |
+          set -euo pipefail
+          cd frontend/control-ops
+          npm run dev -- --host 127.0.0.1 --port 4175 >/tmp/control-ops.log 2>&1 &
+          server_pid=$!
+          trap 'kill "${server_pid}" >/dev/null 2>&1 || true' EXIT
+          timeout 60 bash -c 'until curl -fsS http://127.0.0.1:4175 >/dev/null; do sleep 1; done'
+          PLAYWRIGHT_BASE_URL=http://127.0.0.1:4175 npm run test:e2e
 
       - name: Validate kustomize overlays
         run: |

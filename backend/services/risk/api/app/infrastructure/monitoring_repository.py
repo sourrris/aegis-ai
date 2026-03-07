@@ -15,6 +15,26 @@ from app.infrastructure.db import set_tenant_context
 pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
 
 
+def _coerce_json_object(value: object) -> dict:
+    if value is None:
+        return {}
+
+    candidate = value
+    if isinstance(candidate, str):
+        try:
+            candidate = json.loads(candidate)
+        except json.JSONDecodeError:
+            return {"raw": candidate}
+
+    if isinstance(candidate, dict):
+        return candidate
+
+    if hasattr(candidate, "items"):
+        return dict(candidate)
+
+    return {"value": candidate}
+
+
 class UserRepository:
     ROLE_DEFAULT_SCOPES: dict[str, list[str]] = {
         "admin": ["events:write", "events:read", "alerts:write", "alerts:read", "models:read", "models:write", "connectors:read"],
@@ -418,10 +438,10 @@ class EventRepository:
             ),
             {"event_id": str(event_id)},
         )
-        return {
-            **dict(event._mapping),
-            "processing_history": [dict(item._mapping) for item in processing],
-        }
+        payload = dict(event._mapping)
+        payload["payload"] = _coerce_json_object(payload.get("payload"))
+        payload["processing_history"] = [dict(item._mapping) for item in processing]
+        return payload
 
 
 class MonitoringRepository:
@@ -662,7 +682,9 @@ class MonitoringRepository:
         if not result:
             return None
 
-        return dict(result._mapping)
+        payload = dict(result._mapping)
+        payload["event_payload"] = _coerce_json_object(payload.get("event_payload"))
+        return payload
 
 
 class ModelRepository:

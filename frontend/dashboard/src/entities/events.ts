@@ -21,7 +21,7 @@ export const eventHistoryItemSchema = z.object({
 });
 
 export const eventDetailSchema = eventListItemSchema.extend({
-  payload: z.record(z.any()),
+  payload: z.record(z.unknown()),
   features: z.array(z.number()),
   submitted_by: z.string(),
   processing_history: z.array(eventHistoryItemSchema)

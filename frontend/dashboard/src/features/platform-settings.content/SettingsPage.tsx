@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useAuth } from '../../app/state/auth-context';
 import { useUI } from '../../app/state/ui-context';
 import { API_BASE_URL, CONTROL_OPS_URL, CONTROL_TENANT_URL, WS_BASE_URL } from '../../shared/lib/constants';
-import { buildConsoleHandoffUrl } from '../../shared/lib/control-handoff';
 import { Badge } from '../../shared/ui/badge';
 import { Button } from '../../shared/ui/button';
 import { DataPanel } from '../../shared/ui/DataPanel';
@@ -14,12 +13,11 @@ import { Select } from '../../shared/ui/select';
 import { DashboardPageFrame } from '../../widgets/layout/DashboardPageFrame';
 
 export function SettingsPage() {
-  const { token, username } = useAuth();
+  const { username } = useAuth();
   const { theme, setTheme, timezone, setTimezone, tenant, window, density } = useUI();
   const [openShortcuts, setOpenShortcuts] = useState(false);
-  const tenantConsoleUrl =
-    token ? buildConsoleHandoffUrl(CONTROL_TENANT_URL, token, username) : CONTROL_TENANT_URL;
-  const opsConsoleUrl = token ? buildConsoleHandoffUrl(CONTROL_OPS_URL, token, username) : CONTROL_OPS_URL;
+  const tenantConsoleUrl = CONTROL_TENANT_URL;
+  const opsConsoleUrl = CONTROL_OPS_URL;
 
   return (
     <DashboardPageFrame chips={<Badge variant="info">density {density}</Badge>}>

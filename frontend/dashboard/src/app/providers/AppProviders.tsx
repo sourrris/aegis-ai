@@ -7,6 +7,11 @@ import { LiveAlertsProvider } from '../state/live-alerts-context';
 import { UIProvider } from '../state/ui-context';
 import { ToastProvider, useToast } from '../../shared/ui/toaster';
 
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
+
 // Inner component to properly inject the toast function into LiveAlertsProvider
 function LiveAlertsWithToast({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
@@ -30,7 +35,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <BrowserRouter future={routerFuture}>
         <AuthProvider>
           <UIProvider>
             <ToastProvider>

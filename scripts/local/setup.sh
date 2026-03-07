@@ -74,6 +74,7 @@ echo "Installing frontend dependencies..."
 (cd "$ROOT_DIR/frontend/dashboard" && npm install)
 (cd "$ROOT_DIR/frontend/control-tenant" && npm install)
 (cd "$ROOT_DIR/frontend/control-ops" && npm install)
+(cd "$ROOT_DIR/frontend/control-ops" && npx playwright install chromium)
 
 cat > "$ROOT_DIR/frontend/dashboard/.env.local" <<'EOF'
 VITE_API_BASE_URL=http://api.localhost

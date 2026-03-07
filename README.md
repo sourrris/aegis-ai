@@ -91,6 +91,8 @@ Use this path if Docker is not installed or Docker daemon is unavailable on your
 
 `docker compose up -d --build` now runs a one-shot `db-migrate` service first, and backend services wait for it to complete successfully. This applies Alembic migrations automatically on fresh machines.
 
+For release validation, treat `docker compose up -d --build` as the canonical full-stack smoke path. `./scripts/local/start.sh` is a convenience workflow for local iteration, not the public-release gate.
+
 3. Optional: if you override domains to non-`*.localhost` values in `.env`, add host mappings once:
 
 ```bash

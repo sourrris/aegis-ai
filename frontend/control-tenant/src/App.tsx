@@ -4,7 +4,7 @@ import { Navigate, NavLink, Route, Routes } from 'react-router-dom';
 
 import { ControlApiClient } from '../../packages/control-api-client/src/client';
 import type { TenantConfigurationDTO } from '../../packages/control-api-client/src/types';
-import { buildMonitoringLoginUrl, consumeSessionFromUrl } from '../../packages/control-auth/src/handoff';
+import { buildMonitoringLoginUrl } from '../../packages/control-auth/src/handoff';
 import { parseAuthSession } from '../../packages/control-auth/src/session';
 import { getTenantPageMeta, TENANT_HOME_PATH, TENANT_PAGE_META } from './page-meta';
 import {
@@ -42,14 +42,6 @@ type SessionBootstrapState = SessionState & {
 };
 
 function getSessionState(): SessionState {
-  const handedOffSession = consumeSessionFromUrl();
-  if (handedOffSession.token) {
-    return {
-      token: handedOffSession.token,
-      username: handedOffSession.username,
-      tenantId: handedOffSession.tenantId ?? 'tenant-alpha'
-    };
-  }
   const token = window.localStorage.getItem('risk_token');
   const username = window.localStorage.getItem('risk_username');
   const session = parseAuthSession(token, username);
