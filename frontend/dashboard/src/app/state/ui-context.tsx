@@ -1,5 +1,6 @@
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
+import { useAuth } from './auth-context';
 import { STORAGE_KEYS, TENANT_OPTIONS, WINDOW_OPTIONS, type TenantOption, type WindowOption } from '../../shared/lib/constants';
 import type { TimezonePreference } from '../../shared/lib/time';
 
@@ -22,7 +23,11 @@ type UIState = {
 const UIContext = createContext<UIState | null>(null);
 
 function asTenant(input: string | null): TenantOption {
-  return TENANT_OPTIONS.includes((input ?? '') as TenantOption) ? (input as TenantOption) : 'all';
+  const normalized = input?.trim();
+  if (!normalized) {
+    return 'all';
+  }
+  return TENANT_OPTIONS.includes(normalized as (typeof TENANT_OPTIONS)[number]) ? normalized : normalized;
 }
 
 function asWindow(input: string | null): WindowOption {
@@ -40,6 +45,7 @@ function asDensity(input: string | null): DensityPreference {
 }
 
 export function UIProvider({ children }: { children: React.ReactNode }) {
+  const { tenantId: sessionTenantId } = useAuth();
   const [tenant, setTenantState] = useState<TenantOption>(() => asTenant(window.localStorage.getItem(STORAGE_KEYS.tenant)));
   const [range, setRangeState] = useState<WindowOption>(() => asWindow(window.localStorage.getItem(STORAGE_KEYS.window)));
   const [timezone, setTimezoneState] = useState<TimezonePreference>(
@@ -49,6 +55,19 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
     () => (window.localStorage.getItem(STORAGE_KEYS.theme) as ThemePreference | null) ?? 'light'
   );
   const [density, setDensityState] = useState<DensityPreference>(() => asDensity(window.localStorage.getItem(STORAGE_KEYS.density)));
+
+  useEffect(() => {
+    if (!sessionTenantId) {
+      return;
+    }
+    setTenantState((current) => {
+      if (current === 'all' || current === sessionTenantId) {
+        return current;
+      }
+      window.localStorage.setItem(STORAGE_KEYS.tenant, sessionTenantId);
+      return sessionTenantId;
+    });
+  }, [sessionTenantId]);
 
   const value = useMemo<UIState>(
     () => ({

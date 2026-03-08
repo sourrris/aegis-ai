@@ -5,6 +5,7 @@ import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'rec
 import { useAuth } from '../../app/state/auth-context';
 import { useUI } from '../../app/state/ui-context';
 import { activateModel, fetchModelMetrics, fetchModels, fetchTrainingRuns, trainModel } from '../../shared/api/models';
+import { resolveTenantSelection } from '../../shared/lib/tenant';
 import { formatDateTime } from '../../shared/lib/time';
 import { Badge } from '../../shared/ui/badge';
 import { Button } from '../../shared/ui/button';
@@ -28,9 +29,10 @@ function renderBadge(modelsLoading: boolean, modelsError: boolean, activeLabel: 
 }
 
 export function ModelsPage() {
-  const { token } = useAuth();
+  const { token, tenantId } = useAuth();
   const { tenant } = useUI();
   const queryClient = useQueryClient();
+  const resolvedTenant = resolveTenantSelection(tenant, tenantId);
 
   const [selectedVersion, setSelectedVersion] = useState<string>('');
   const [activateTarget, setActivateTarget] = useState<{ modelName: string; modelVersion: string } | null>(null);
@@ -81,7 +83,7 @@ export function ModelsPage() {
     mutationFn: async () =>
       trainModel(token!, {
         model_name: modelName,
-        tenant_id: tenant === 'all' ? undefined : tenant,
+        tenant_id: resolvedTenant,
         lookback_hours: lookbackHours,
         max_samples: maxSamples,
         min_samples: minSamples,

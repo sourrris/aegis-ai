@@ -9,6 +9,7 @@ import { fetchAlerts } from '../../shared/api/alerts';
 import { fetchDataSourceRuns, fetchDataSourceStatus } from '../../shared/api/data-sources';
 import { fetchOverviewMetrics } from '../../shared/api/overview';
 import { formatDateTime } from '../../shared/lib/time';
+import { resolveTenantSelection } from '../../shared/lib/tenant';
 import { Badge } from '../../shared/ui/badge';
 import { DataPanel } from '../../shared/ui/DataPanel';
 import { KpiCard } from '../../shared/ui/KpiCard';
@@ -67,14 +68,15 @@ function scrollToSection(id: string) {
 }
 
 export function OverviewPage() {
-  const { token } = useAuth();
+  const { token, tenantId } = useAuth();
   const { tenant, window, timezone } = useUI();
   const tenantConfig = resolveTenantConfig(tenant);
   const live = useLiveAlertState();
+  const resolvedTenant = resolveTenantSelection(tenant, tenantId) ?? 'tenant-alpha';
 
   const metricsQuery = useQuery({
     queryKey: ['overview-metrics', tenant, window],
-    queryFn: async () => fetchOverviewMetrics(token!, tenant, window),
+    queryFn: async () => fetchOverviewMetrics(token!, resolvedTenant, window),
     enabled: Boolean(token),
     refetchInterval: live.connected && !live.stale ? false : 15_000,
     refetchIntervalInBackground: true
@@ -84,7 +86,7 @@ export function OverviewPage() {
     queryKey: ['overview-critical-alerts', tenant, window],
     queryFn: async () =>
       fetchAlerts(token!, {
-        tenant_id: tenant === 'all' ? undefined : tenant,
+        tenant_id: resolvedTenant,
         severity: 'critical',
         limit: 10
       }),

@@ -4,6 +4,7 @@ import { AlertsPage } from '../../features/alert-monitor.content/AlertsPage';
 import { EventsPage } from '../../features/event-stream.content/EventsPage';
 import { AuthCallbackPage } from '../../features/access-auth.content/AuthCallbackPage';
 import { LoginPage } from '../../features/access-auth.content/LoginPage';
+import { RegisterPage } from '../../features/access-auth.content/RegisterPage';
 import { ModelsPage } from '../../features/model-management.content/ModelsPage';
 import { OverviewPage } from '../../features/risk-dashboard.content/OverviewPage';
 import { SettingsPage } from '../../features/platform-settings.content/SettingsPage';
@@ -14,6 +15,7 @@ export function AppRouter() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
 
       <Route element={<ProtectedRoute />}>

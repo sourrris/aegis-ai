@@ -1,30 +1,33 @@
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Link, Navigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '../../app/state/auth-context';
 import { buildControlHandoffUrl } from '../../../../packages/control-auth/src/handoff';
-import { login } from '../../shared/api/auth';
-import { API_BASE_URL } from '../../shared/lib/constants';
+import { register } from '../../shared/api/auth';
 import { AmbientBackground } from '../../shared/ui/AmbientBackground';
 import { Button } from '../../shared/ui/button';
 import { Card } from '../../shared/ui/card';
 import { Input } from '../../shared/ui/input';
 
-export function LoginPage() {
+export function RegisterPage() {
+  const navigate = useNavigate();
   const { token, username: currentUsername, setSession } = useAuth();
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin123');
   const [params] = useSearchParams();
   const returnTo = params.get('returnTo');
+  const [username, setUsername] = useState('test@example.com');
+  const [password, setPassword] = useState('TestPass123');
+  const [organizationName, setOrganizationName] = useState('TestOrg');
 
   const mutation = useMutation({
-    mutationFn: async () => login(username, password),
+    mutationFn: async () => register(username, password, organizationName),
     onSuccess: (result) => {
       setSession(result.access_token, username);
       if (returnTo) {
         window.location.assign(buildControlHandoffUrl(returnTo, result.access_token, username));
+        return;
       }
+      navigate('/settings', { replace: true });
     }
   });
 
@@ -33,8 +36,8 @@ export function LoginPage() {
     return null;
   }
 
-  if (token && !returnTo) {
-    return <Navigate to="/overview" replace />;
+  if (token) {
+    return <Navigate to="/settings" replace />;
   }
 
   return (
@@ -44,48 +47,47 @@ export function LoginPage() {
       <div className="relative z-10 mx-auto grid w-full max-w-5xl gap-8 lg:grid-cols-[1.2fr_420px] lg:items-center">
         <section className="stack-md">
           <p className="inline-flex w-fit items-center rounded-pill border border-stroke bg-white px-3 py-1 text-sm font-semibold text-zinc-700">
-            Aegis Risk Monitoring
+            Tenant Bootstrap
           </p>
           <h1 className="text-balance text-5xl font-extrabold tracking-tight text-ink sm:text-6xl">
-            Dead simple risk operations.
+            Launch a clean workspace in one pass.
           </h1>
           <p className="max-w-2xl text-lg text-ink-muted">
-            Sign in to monitor live anomalies, connector health, and model behavior from a clean operational cockpit.
+            Create an organization, land in settings, register a domain, and mint the first ingest key without leaving the dashboard.
           </p>
         </section>
 
         <Card className="login-card">
-          <h2 className="text-2xl font-bold tracking-tight">Sign in</h2>
-          <p className="muted">Use your account to access operational dashboards.</p>
+          <h2 className="text-2xl font-bold tracking-tight">Create workspace</h2>
+          <p className="muted">This creates a tenant-scoped admin account and signs you in immediately.</p>
 
-          <label htmlFor="username">Username</label>
-          <Input id="username" value={username} onChange={(event) => setUsername(event.target.value)} />
+          <label htmlFor="register-username">Work email</label>
+          <Input id="register-username" type="email" value={username} onChange={(event) => setUsername(event.target.value)} />
 
-          <label htmlFor="password">Password</label>
+          <label htmlFor="register-password">Password</label>
           <Input
-            id="password"
+            id="register-password"
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
           />
 
+          <label htmlFor="organization-name">Organization</label>
+          <Input
+            id="organization-name"
+            value={organizationName}
+            onChange={(event) => setOrganizationName(event.target.value)}
+          />
+
           <Button variant="primary" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-            {mutation.isPending ? 'Signing in...' : 'Sign in'}
-          </Button>
-
-          <Button variant="secondary" onClick={() => window.location.assign(`${API_BASE_URL}/v1/auth/google/login`)}>
-            Sign in with Google
-          </Button>
-
-          <Button variant="secondary" onClick={() => window.location.assign(`${API_BASE_URL}/v1/auth/apple/login`)}>
-            Sign in with Apple
+            {mutation.isPending ? 'Creating workspace...' : 'Create workspace'}
           </Button>
 
           <p className="muted">
-            Need a workspace? <Link to="/register">Create one</Link>
+            Already have access? <Link to="/login">Sign in</Link>
           </p>
 
-          {mutation.isError && <p className="inline-error">Authentication failed. Check credentials.</p>}
+          {mutation.isError && <p className="inline-error">{(mutation.error as Error).message}</p>}
         </Card>
       </div>
     </div>

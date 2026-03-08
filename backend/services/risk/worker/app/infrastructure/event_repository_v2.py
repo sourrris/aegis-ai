@@ -9,6 +9,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.infrastructure.db import set_tenant_context
 
 
+async def _update_legacy_event_status(session: AsyncSession, *, event_id: UUID, status: str) -> None:
+    await session.execute(
+        text(
+            """
+            UPDATE events
+            SET status = :status
+            WHERE event_id = :event_id
+            """
+        ),
+        {"status": status, "event_id": str(event_id)},
+    )
+
+
 async def persist_enrichment(
     session: AsyncSession,
     *,
@@ -156,6 +169,7 @@ async def persist_decision(
         ),
         {"status": status, "tenant_id": tenant_id, "event_id": str(event_id)},
     )
+    await _update_legacy_event_status(session, event_id=event_id, status=status)
 
     if risk_level in {"high", "critical"}:
         await session.execute(
@@ -217,4 +231,5 @@ async def mark_failed_v2(session: AsyncSession, *, tenant_id: str, event_id: UUI
         ),
         {"tenant_id": tenant_id, "event_id": str(event_id)},
     )
+    await _update_legacy_event_status(session, event_id=event_id, status="failed")
     await session.commit()

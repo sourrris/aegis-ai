@@ -43,6 +43,10 @@ class UserRepository:
     }
 
     @staticmethod
+    def hash_password(password: str) -> str:
+        return pwd_context.hash(password)
+
+    @staticmethod
     def verify_password_and_upgrade_hash(password: str, stored_hash: str) -> tuple[bool, str | None]:
         """Validate password against stored credentials and return optional upgraded hash.
 
@@ -97,7 +101,7 @@ class UserRepository:
         if existing_user:
             return existing_user
 
-        social_password_hash = pwd_context.hash(f"social-login:{username}:{datetime.now(UTC).timestamp()}")
+        social_password_hash = UserRepository.hash_password(f"social-login:{username}:{datetime.now(UTC).timestamp()}")
         user = User(username=username, password_hash=social_password_hash, role="analyst")
         session.add(user)
         await session.commit()
@@ -290,6 +294,21 @@ class RefreshSessionRepository:
         await session.commit()
 
 class EventRepository:
+    PAYLOAD_JSON_SQL = (
+        "CASE "
+        "WHEN jsonb_typeof(e.payload::jsonb) = 'string' THEN (e.payload::jsonb #>> '{}')::jsonb "
+        "ELSE e.payload::jsonb "
+        "END"
+    )
+    RAW_DOMAIN_ID_SQL = (
+        f"COALESCE({PAYLOAD_JSON_SQL} -> 'metadata' ->> 'registered_domain_id', {PAYLOAD_JSON_SQL} ->> 'registered_domain_id')"
+    )
+    DOMAIN_ID_SQL = f"COALESCE(td.domain_id::text, {RAW_DOMAIN_ID_SQL})"
+    DOMAIN_HOSTNAME_SQL = (
+        f"COALESCE(td.hostname, {PAYLOAD_JSON_SQL} -> 'metadata' ->> 'registered_domain', {PAYLOAD_JSON_SQL} ->> 'registered_domain')"
+    )
+    SEVERITY_SQL = "COALESCE(a.severity, rd.risk_level)"
+
     @staticmethod
     async def create_if_absent(
         session: AsyncSession,
@@ -303,7 +322,7 @@ class EventRepository:
                 tenant_id=event.tenant_id,
                 source=event.source,
                 event_type=event.event_type,
-                payload=json.dumps(event.payload),
+                payload=event.payload,
                 features=event.features,
                 status="queued",
                 submitted_by=submitted_by,
@@ -331,38 +350,51 @@ class EventRepository:
         session: AsyncSession,
         *,
         tenant_id: str | None,
+        domain_id: str | None,
         status: str | None,
+        severity: str | None,
         source: str | None,
         event_type: str | None,
         from_ts: datetime | None,
         to_ts: datetime | None,
+        page: int | None,
         cursor: str | None,
         limit: int,
     ) -> dict:
-        try:
-            offset = int(cursor or 0)
-        except ValueError:
-            offset = 0
+        if page is not None:
+            offset = (page - 1) * limit
+        else:
+            try:
+                offset = int(cursor or 0)
+            except ValueError:
+                offset = 0
+
         where_clauses = ["1=1"]
         params: dict = {"offset": offset, "limit": limit}
 
         if tenant_id:
-            where_clauses.append("tenant_id = :tenant_id")
+            where_clauses.append("e.tenant_id = :tenant_id")
             params["tenant_id"] = tenant_id
+        if domain_id:
+            where_clauses.append(f"{EventRepository.DOMAIN_ID_SQL} = :domain_id")
+            params["domain_id"] = domain_id
         if status:
-            where_clauses.append("status = :status")
+            where_clauses.append("e.status = :status")
             params["status"] = status
+        if severity:
+            where_clauses.append(f"{EventRepository.SEVERITY_SQL} = :severity")
+            params["severity"] = severity
         if source:
-            where_clauses.append("source = :source")
+            where_clauses.append("e.source = :source")
             params["source"] = source
         if event_type:
-            where_clauses.append("event_type = :event_type")
+            where_clauses.append("e.event_type = :event_type")
             params["event_type"] = event_type
         if from_ts:
-            where_clauses.append("ingested_at >= :from_ts")
+            where_clauses.append("e.ingested_at >= :from_ts")
             params["from_ts"] = from_ts
         if to_ts:
-            where_clauses.append("ingested_at <= :to_ts")
+            where_clauses.append("e.ingested_at <= :to_ts")
             params["to_ts"] = to_ts
 
         where_sql = " AND ".join(where_clauses)
@@ -371,16 +403,29 @@ class EventRepository:
             text(
                 f"""
                 SELECT
-                    event_id,
-                    tenant_id,
-                    source,
-                    event_type,
-                    status,
-                    occurred_at,
-                    ingested_at
-                FROM events
+                    e.event_id,
+                    e.tenant_id,
+                    e.source,
+                    e.event_type,
+                    e.status,
+                    e.occurred_at,
+                    e.ingested_at,
+                    rd.risk_score,
+                    rd.risk_level,
+                    {EventRepository.SEVERITY_SQL} AS severity,
+                    {EventRepository.DOMAIN_ID_SQL} AS domain_id,
+                    {EventRepository.DOMAIN_HOSTNAME_SQL} AS domain_hostname
+                FROM events e
+                LEFT JOIN risk_decisions rd
+                  ON rd.tenant_id = e.tenant_id
+                 AND rd.event_id = e.event_id
+                LEFT JOIN alerts_v2 a
+                  ON a.tenant_id = e.tenant_id
+                 AND a.event_id = e.event_id
+                LEFT JOIN tenant_domains td
+                  ON td.domain_id::text = {EventRepository.RAW_DOMAIN_ID_SQL}
                 WHERE {where_sql}
-                ORDER BY ingested_at DESC
+                ORDER BY e.ingested_at DESC
                 OFFSET :offset
                 LIMIT :limit
                 """
@@ -388,11 +433,40 @@ class EventRepository:
             params,
         )
 
-        total = await session.execute(text(f"SELECT COUNT(*) AS total FROM events WHERE {where_sql}"), params)
+        total = await session.execute(
+            text(
+                f"""
+                SELECT COUNT(*) AS total
+                FROM events e
+                LEFT JOIN risk_decisions rd
+                  ON rd.tenant_id = e.tenant_id
+                 AND rd.event_id = e.event_id
+                LEFT JOIN alerts_v2 a
+                  ON a.tenant_id = e.tenant_id
+                 AND a.event_id = e.event_id
+                LEFT JOIN tenant_domains td
+                  ON td.domain_id::text = {EventRepository.RAW_DOMAIN_ID_SQL}
+                WHERE {where_sql}
+                """
+            ),
+            params,
+        )
         total_count = int(total.scalar_one() or 0)
         items = [dict(row._mapping) for row in rows]
+        for item in items:
+            if item.get("risk_score") is not None:
+                item["risk_score"] = float(item["risk_score"])
         next_cursor = str(offset + limit) if offset + limit < total_count else None
-        return {"items": items, "next_cursor": next_cursor, "total_estimate": total_count}
+        total_pages = max(1, (total_count + limit - 1) // limit) if limit else 1
+        current_page = page if page is not None else (offset // limit) + 1 if limit else 1
+        return {
+            "items": items,
+            "next_cursor": next_cursor,
+            "total_estimate": total_count,
+            "page": current_page,
+            "page_size": limit,
+            "total_pages": total_pages,
+        }
 
     @staticmethod
     async def fetch_event_detail(session: AsyncSession, event_id: UUID) -> dict | None:
@@ -420,6 +494,10 @@ class EventRepository:
         if not event:
             return None
 
+        tenant_id = str(event._mapping.get("tenant_id") or "")
+        if tenant_id:
+            await set_tenant_context(session, tenant_id)
+
         processing = await session.execute(
             text(
                 """
@@ -438,9 +516,53 @@ class EventRepository:
             ),
             {"event_id": str(event_id)},
         )
+        decision = await session.execute(
+            text(
+                """
+                SELECT
+                    decision_id,
+                    risk_score,
+                    risk_level,
+                    reasons,
+                    rule_hits,
+                    model_name,
+                    model_version,
+                    ml_anomaly_score,
+                    ml_threshold,
+                    decision_latency_ms,
+                    created_at
+                FROM risk_decisions
+                WHERE tenant_id = :tenant_id
+                  AND event_id = :event_id
+                LIMIT 1
+                """
+            ),
+            {"tenant_id": tenant_id, "event_id": str(event_id)},
+        )
         payload = dict(event._mapping)
         payload["payload"] = _coerce_json_object(payload.get("payload"))
-        payload["processing_history"] = [dict(item._mapping) for item in processing]
+        processing_history = [dict(item._mapping) for item in processing]
+        decision_item = decision.first()
+        if decision_item:
+            decision_payload = dict(decision_item._mapping)
+            payload["risk_score"] = float(decision_payload.get("risk_score") or 0.0)
+            payload["risk_level"] = str(decision_payload.get("risk_level") or "")
+            payload["reasons"] = [str(item) for item in decision_payload.get("reasons") or []]
+            payload["rule_hits"] = [str(item) for item in decision_payload.get("rule_hits") or []]
+            payload["decision_latency_ms"] = decision_payload.get("decision_latency_ms")
+            if not processing_history:
+                processing_history = [
+                    {
+                        "id": str(decision_payload["decision_id"]),
+                        "model_name": decision_payload["model_name"],
+                        "model_version": decision_payload["model_version"],
+                        "anomaly_score": float(decision_payload.get("ml_anomaly_score") or 0.0),
+                        "threshold": float(decision_payload.get("ml_threshold") or 0.0),
+                        "is_anomaly": payload["risk_level"] in {"high", "critical"},
+                        "processed_at": decision_payload["created_at"],
+                    }
+                ]
+        payload["processing_history"] = processing_history
         return payload
 
 

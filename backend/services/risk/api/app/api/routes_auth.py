@@ -10,7 +10,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
 from jose import jwt
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from risk_common.schemas import TokenResponse
 from risk_common.security import build_rsa_jwk, create_access_token, create_refresh_token, decode_refresh_token
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.infrastructure.db import get_db_session
 from app.infrastructure.monitoring_repository import RefreshSessionRepository, UserRepository
+from app.infrastructure.tenant_setup_repository import DuplicateResourceError, TenantSetupRepository
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 settings = get_settings()
@@ -38,6 +39,37 @@ class LoginRequest(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str | None = None
+
+
+class RegisterRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=120)
+    password: str = Field(min_length=8, max_length=256)
+    organization_name: str = Field(min_length=2, max_length=255)
+
+    @field_validator("username")
+    @classmethod
+    def normalize_username(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if "@" not in normalized:
+            raise ValueError("Username must be an email address")
+        return normalized
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        if not any(char.isupper() for char in value) or not any(char.islower() for char in value) or not any(
+            char.isdigit() for char in value
+        ):
+            raise ValueError("Password must include upper, lower, and numeric characters")
+        return value
+
+    @field_validator("organization_name")
+    @classmethod
+    def normalize_organization_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 2:
+            raise ValueError("Organization name is required")
+        return normalized
 
 
 class OAuthStatePayload(BaseModel):
@@ -250,6 +282,38 @@ async def issue_token(
         scopes=context["scopes"],
     )
     _set_auth_cookies(response, access_token=access_token, refresh_token=refresh_token)
+    return TokenResponse(access_token=access_token)
+
+
+@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+async def register_account(
+    payload: RegisterRequest,
+    request: Request,
+    response: Response,
+    session: AsyncSession = Depends(get_db_session),  # noqa: B008
+) -> TokenResponse:
+    try:
+        account = await TenantSetupRepository.create_account(
+            session,
+            username=payload.username,
+            password=payload.password,
+            organization_name=payload.organization_name,
+        )
+    except DuplicateResourceError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    access_token, refresh_token = await _issue_session_tokens(
+        session=session,
+        request=request,
+        username=str(account["username"]),
+        tenant_id=str(account["tenant_id"]),
+        roles=[str(item) for item in account["roles"]],
+        scopes=[str(item) for item in account["scopes"]],
+    )
+    _set_auth_cookies(response, access_token=access_token, refresh_token=refresh_token)
+    response.status_code = status.HTTP_201_CREATED
     return TokenResponse(access_token=access_token)
 
 

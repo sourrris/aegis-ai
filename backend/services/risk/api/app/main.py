@@ -15,6 +15,7 @@ from app.api import (
     routes_events_v2,
     routes_models_v2,
     routes_risk_decisions_v2,
+    routes_setup,
     routes_platform_v1,
 )
 from app.config import get_settings
@@ -63,6 +64,7 @@ app.include_router(routes_alerts_v2.router)
 app.include_router(routes_risk_decisions_v2.router)
 app.include_router(routes_data_sources_v2.router)
 app.include_router(routes_models_v2.router)
+app.include_router(routes_setup.router)
 app.include_router(routes_platform_v1.router)
 
 

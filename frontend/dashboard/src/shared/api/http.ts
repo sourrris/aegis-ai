@@ -10,7 +10,18 @@ type HttpOptions = {
   body?: unknown;
   credentials?: RequestCredentials;
   retries?: number;
+  headers?: Record<string, string>;
 };
+
+export class RequestError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'RequestError';
+    this.status = status;
+  }
+}
 
 async function delay(ms: number) {
   await new Promise((resolve) => {
@@ -35,7 +46,8 @@ export async function requestJson<T>(
       credentials: options.credentials,
       headers: {
         'Content-Type': 'application/json',
-        ...(options.token ? { Authorization: `Bearer ${options.token}` } : {})
+        ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
+        ...(options.headers ?? {})
       },
       body: options.body ? JSON.stringify(options.body) : undefined
     });
@@ -46,7 +58,16 @@ export async function requestJson<T>(
         await delay(250 * 2 ** attempt);
         continue;
       }
-      throw new Error(`Request failed (${response.status}): ${response.statusText}`);
+      let message = `Request failed (${response.status}): ${response.statusText}`;
+      try {
+        const payload = await response.json();
+        if (typeof payload?.detail === 'string' && payload.detail.trim().length > 0) {
+          message = payload.detail;
+        }
+      } catch {
+        // Preserve the default message when the response is not JSON.
+      }
+      throw new RequestError(response.status, message);
     }
 
     const payload = await response.json();

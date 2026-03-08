@@ -9,7 +9,8 @@ import type {
   DeliveryLogItemDTO,
   TenantSummary
 } from '../../packages/control-api-client/src/types';
-import { buildMonitoringLoginUrl } from '../../packages/control-auth/src/handoff';
+import { buildMonitoringLoginUrl, consumeControlHandoff } from '../../packages/control-auth/src/handoff';
+import { refreshAccessTokenOnce } from '../../packages/control-auth/src/refresh';
 import {
   DEFAULT_LIMIT,
   MAX_LIMIT,
@@ -40,7 +41,7 @@ import {
 
 const CONTROL_API_BASE_URL = import.meta.env.VITE_CONTROL_API_BASE_URL ?? 'http://control-api.localhost';
 const MONITORING_APP_URL = import.meta.env.VITE_MONITORING_APP_URL ?? 'http://app.localhost';
-const MONITORING_API_BASE_URL = import.meta.env.VITE_MONITORING_API_BASE_URL ?? 'http://api.localhost';
+const MONITORING_API_BASE_URL = import.meta.env.VITE_MONITORING_API_BASE_URL ?? '/monitoring-api';
 const TENANT_CONSOLE_URL = import.meta.env.VITE_TENANT_CONSOLE_URL ?? 'http://control.localhost';
 
 const OPS_SCOPE_RULES = {
@@ -53,6 +54,18 @@ const OPS_SCOPE_RULES = {
 } as const;
 
 function getSessionState(): SessionState {
+  const handoff = consumeControlHandoff();
+  if (handoff) {
+    const handedOffSession = deriveSessionState(handoff.token, handoff.username);
+    if (handedOffSession.status === 'ready' && handedOffSession.token) {
+      window.localStorage.setItem('risk_token', handedOffSession.token);
+      if (handedOffSession.username) {
+        window.localStorage.setItem('risk_username', handedOffSession.username);
+      }
+      return handedOffSession;
+    }
+  }
+
   const token = window.localStorage.getItem('risk_token');
   const username = window.localStorage.getItem('risk_username');
   return deriveSessionState(token, username);
@@ -61,22 +74,12 @@ function getSessionState(): SessionState {
 type BootstrapSessionState = SessionState | { status: 'loading'; token: null; username: null; tenantId: 'all'; scopes: [] };
 
 async function refreshMonitoringSession(): Promise<SessionState | null> {
-  const response = await fetch(`${MONITORING_API_BASE_URL}/v1/auth/refresh`, {
-    method: 'POST',
-    credentials: 'include'
-  });
-
-  if (!response.ok) {
+  const accessToken = await refreshAccessTokenOnce(MONITORING_API_BASE_URL);
+  if (!accessToken) {
     return null;
   }
-
-  const payload = (await response.json()) as { access_token?: string };
-  if (!payload.access_token) {
-    return null;
-  }
-
   const username = window.localStorage.getItem('risk_username');
-  const session = deriveSessionState(payload.access_token, username);
+  const session = deriveSessionState(accessToken, username);
   if (session.status !== 'ready' || !session.token) {
     return null;
   }
