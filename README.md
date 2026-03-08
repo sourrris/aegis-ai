@@ -91,6 +91,8 @@ Use this path if Docker is not installed or Docker daemon is unavailable on your
 
 `docker compose up -d --build` now runs a one-shot `db-migrate` service first, and backend services wait for it to complete successfully. This applies Alembic migrations automatically on fresh machines.
 
+For release validation, treat `docker compose up -d --build` as the canonical full-stack smoke path. `./scripts/local/start.sh` is a convenience workflow for local iteration, not the public-release gate.
+
 3. Optional: if you override domains to non-`*.localhost` values in `.env`, add host mappings once:
 
 ```bash
@@ -201,10 +203,10 @@ docker compose up -d --build
 - Architecture and diagrams: `docs/risk.architecture.md`
 - Folder structure: `docs/engineering.folder-structure.md`
 - V2 operationalization guide: `docs/risk.v2-operationalization.md`
-- jCodeMunch MCP integration: `docs/engineering.mcp-jcodemunch.md`
+- jCodeMunch MCP setup: `docs/engineering.mcp-jcodemunch.md`
 
 ## MCP
-- Vendored `jcodemunch-mcp` source: `mcp/jcodemunch-mcp`
+- `jcodemunch-mcp` is used as an external MCP dependency, not vendored in this repository.
 - Setup/configuration guide: `docs/engineering.mcp-jcodemunch.md`
 
 ## Key Production Patterns Included

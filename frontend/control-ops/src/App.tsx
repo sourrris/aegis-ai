@@ -18,7 +18,6 @@ import {
   hasAllScopes,
   hasAnyScope,
   normalizeLimit,
-  readHandedOffSession,
   type SessionState
 } from './app-state';
 import { getOpsPageMeta, OPS_HOME_PATH, OPS_PAGE_META } from './page-meta';
@@ -54,10 +53,6 @@ const OPS_SCOPE_RULES = {
 } as const;
 
 function getSessionState(): SessionState {
-  const handedOffSession = readHandedOffSession();
-  if (handedOffSession) {
-    return handedOffSession;
-  }
   const token = window.localStorage.getItem('risk_token');
   const username = window.localStorage.getItem('risk_username');
   return deriveSessionState(token, username);
@@ -165,7 +160,7 @@ function EnvironmentChecklist() {
     'Reverse proxy resolves ops-control.localhost, control.localhost, and control-api.localhost.',
     'The ops console frontend responds at http://ops-control.localhost.',
     'The control API responds at http://control-api.localhost/health/live.',
-    'Browser storage contains a valid risk_token and optional risk_username for authenticated flows.'
+    'Use either shared monitoring refresh cookies or browser storage with a valid risk_token for authenticated flows.'
   ];
 
   return (

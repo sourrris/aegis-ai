@@ -9,6 +9,7 @@
 
 ## Commands
 
+- `npx playwright install chromium`
 - `npm run build`
 - `npm test`
 - `npm run test:e2e`

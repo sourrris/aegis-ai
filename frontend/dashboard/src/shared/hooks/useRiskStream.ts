@@ -81,22 +81,12 @@ export function useRiskStream(token: string | null, tenant: string, toast?: Retu
           if (parsed.success) {
             if (parsed.data.type === 'ALERT_CREATED' || parsed.data.type === 'ALERT_V2_CREATED') {
               const normalized = normalizeLiveAlert(parsed.data.data);
-              console.log(
-                `%c[🚨 Live Alert] ${normalized.severity.toUpperCase()}`,
-                `color: ${normalized.severity === 'critical' ? '#ef4444' : normalized.severity === 'high' ? '#f97316' : '#eab308'}; font-weight: bold;`,
-                normalized
-              );
               setAlerts((prev) => [normalized, ...prev].slice(0, 100));
               return;
             }
             if (parsed.data.type === 'METRIC_UPDATED') {
               const metric = liveMetricSchema.safeParse(parsed.data.data);
               if (metric.success) {
-                console.debug(
-                  `%c[📊 Live Metric]`,
-                  'color: #8b5cf6; font-weight: bold;',
-                  metric.data
-                );
                 setMetrics((prev) => [metric.data, ...prev].slice(0, 100));
               }
               return;
@@ -104,11 +94,6 @@ export function useRiskStream(token: string | null, tenant: string, toast?: Retu
             if (parsed.data.type === 'SYSTEM_NOTICE') {
               const notice = systemNoticeSchema.safeParse(parsed.data.data);
               if (notice.success && toast) {
-                console.log(
-                  `%c[Live Event] ${notice.data.title}`,
-                  'color: #0ea5e9; font-weight: bold;',
-                  notice.data.message
-                );
                 toast({
                   title: notice.data.title,
                   description: notice.data.message,

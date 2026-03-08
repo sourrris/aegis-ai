@@ -5,6 +5,11 @@ import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import '../../packages/control-ui/src/styles.css';
 
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -18,7 +23,7 @@ const queryClient = new QueryClient({
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <BrowserRouter future={routerFuture}>
         <App />
       </BrowserRouter>
     </QueryClientProvider>

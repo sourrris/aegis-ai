@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '../../app/state/auth-context';
-import { buildConsoleHandoffUrl } from '../../shared/lib/control-handoff';
+import { resolveExternalUrl } from '../../shared/lib/control-handoff';
 import { AmbientBackground } from '../../shared/ui/AmbientBackground';
 import { Card } from '../../shared/ui/card';
 
@@ -18,7 +18,7 @@ export function AuthCallbackPage() {
     if (accessToken && username) {
       setSession(accessToken, username);
       if (returnTo) {
-        window.location.replace(buildConsoleHandoffUrl(returnTo, accessToken, username));
+        window.location.replace(resolveExternalUrl(returnTo));
       }
     }
   }, [params, returnTo, setSession]);

@@ -1,65 +1,32 @@
-# jCodeMunch MCP Integration
+# jCodeMunch MCP Setup
 
-This repository now vendors `jcodemunch-mcp` under:
+This repository does not need a checked-in `mcp/` folder to use jCodeMunch. The application code does not import the vendored copy; MCP usage is configured in the client that launches the server.
 
-- `mcp/jcodemunch-mcp`
+## Recommended Launch Command
 
-Source was copied from `/Users/sourrrish/MCPs/jcodemunch-mcp` on 2026-03-07.
-The copy excludes local machine artifacts (`.git`, `.DS_Store`, `bin/`, `lib/`, `include/`, `pyvenv.cfg`).
-
-## Install Into Project Virtualenv
+Use `uvx` so the MCP server is resolved outside the repo:
 
 ```bash
-source .venv/bin/activate
-python -m pip install -e mcp/jcodemunch-mcp
-jcodemunch-mcp --help
+uvx --from jcodemunch-mcp jcodemunch-mcp
 ```
 
-## MCP Client Configuration
+If you want a pinned version for repeatable local setup, replace the package name with a versioned spec such as `jcodemunch-mcp==0.2.26`.
 
-Use either the local virtualenv executable or `uvx`.
-
-### Option 1: Project virtualenv executable
-
-```json
-{
-  "mcpServers": {
-    "jcodemunch": {
-      "command": "/Users/sourrrish/Aegis AI/.venv/bin/jcodemunch-mcp",
-      "args": []
-    }
-  }
-}
-```
-
-### Option 2: Run from vendored source with `uvx`
+## Example MCP Client Config
 
 ```json
 {
   "mcpServers": {
     "jcodemunch": {
       "command": "uvx",
-      "args": [
-        "--from",
-        "/Users/sourrrish/Aegis AI/mcp/jcodemunch-mcp",
-        "jcodemunch-mcp"
-      ]
+      "args": ["--from", "jcodemunch-mcp", "jcodemunch-mcp"]
     }
   }
 }
 ```
 
-## Updating the Vendored Copy
+## Notes
 
-```bash
-mkdir -p mcp
-rsync -a \
-  --exclude '.git' \
-  --exclude '.DS_Store' \
-  --exclude 'bin' \
-  --exclude 'include' \
-  --exclude 'lib' \
-  --exclude 'pyvenv.cfg' \
-  /Users/sourrrish/MCPs/jcodemunch-mcp/ \
-  mcp/jcodemunch-mcp/
-```
+- `pip install jcodemunch-mcp` also works, but `uvx` avoids depending on a user PATH entry.
+- Optional environment variables such as `GITHUB_TOKEN`, `ANTHROPIC_API_KEY`, and `GOOGLE_API_KEY` belong in the MCP client config, not in this repo.
+- Direct invocation was verified from this workspace on 2026-03-07 with `uvx --from jcodemunch-mcp jcodemunch-mcp --help`.

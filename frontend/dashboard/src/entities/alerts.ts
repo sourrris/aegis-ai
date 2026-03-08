@@ -17,7 +17,7 @@ export const alertListItemSchema = z.object({
 
 export const alertDetailSchema = alertListItemSchema.extend({
   is_anomaly: z.boolean().optional(),
-  event_payload: z.record(z.any()).optional(),
+  event_payload: z.record(z.unknown()).optional(),
   event_status: z.string().optional(),
   occurred_at: z.string().optional()
 });

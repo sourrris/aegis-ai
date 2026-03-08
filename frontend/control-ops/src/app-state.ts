@@ -1,4 +1,3 @@
-import { consumeSessionFromUrl } from '../../packages/control-auth/src/handoff';
 import { parseAuthSession } from '../../packages/control-auth/src/session';
 
 export const DEFAULT_LIMIT = 100;
@@ -35,21 +34,6 @@ export function deriveSessionState(token: string | null, username: string | null
       tenantId: 'all',
       scopes: []
     };
-  }
-
-  return {
-    status: 'ready',
-    token: session.token,
-    username: session.username,
-    tenantId: session.tenantId ?? 'all',
-    scopes: session.scopes
-  };
-}
-
-export function readHandedOffSession(): SessionState | null {
-  const session = consumeSessionFromUrl();
-  if (!session.token) {
-    return null;
   }
 
   return {

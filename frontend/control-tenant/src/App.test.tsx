@@ -6,6 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
 
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
+
 function createJwt(payload: Record<string, unknown>): string {
   const encoded = window
     .btoa(JSON.stringify(payload))
@@ -83,7 +88,7 @@ describe('tenant control console', () => {
     await act(async () => {
       root?.render(
         <QueryClientProvider client={queryClient!}>
-          <MemoryRouter initialEntries={[route]}>
+          <MemoryRouter future={routerFuture} initialEntries={[route]}>
             <App />
           </MemoryRouter>
         </QueryClientProvider>

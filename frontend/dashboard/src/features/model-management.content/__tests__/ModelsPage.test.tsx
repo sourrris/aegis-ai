@@ -27,6 +27,11 @@ vi.mock('../../../shared/api/models', () => ({
 
 import { ModelsPage } from '../ModelsPage';
 
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
+
 function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -36,7 +41,7 @@ function renderPage() {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={['/models']}>
+      <MemoryRouter future={routerFuture} initialEntries={['/models']}>
         <ModelsPage />
       </MemoryRouter>
     </QueryClientProvider>

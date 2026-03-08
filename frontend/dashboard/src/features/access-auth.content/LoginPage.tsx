@@ -5,7 +5,7 @@ import { Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../app/state/auth-context';
 import { login } from '../../shared/api/auth';
 import { API_BASE_URL } from '../../shared/lib/constants';
-import { buildConsoleHandoffUrl } from '../../shared/lib/control-handoff';
+import { resolveExternalUrl } from '../../shared/lib/control-handoff';
 import { AmbientBackground } from '../../shared/ui/AmbientBackground';
 import { Button } from '../../shared/ui/button';
 import { Card } from '../../shared/ui/card';
@@ -23,13 +23,13 @@ export function LoginPage() {
     onSuccess: (result) => {
       setSession(result.access_token, username);
       if (returnTo) {
-        window.location.assign(buildConsoleHandoffUrl(returnTo, result.access_token, username));
+        window.location.assign(resolveExternalUrl(returnTo));
       }
     }
   });
 
   if (token && returnTo) {
-    window.location.replace(buildConsoleHandoffUrl(returnTo, token, currentUsername));
+    window.location.replace(resolveExternalUrl(returnTo));
     return null;
   }
 

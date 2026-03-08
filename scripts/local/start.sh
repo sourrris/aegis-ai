@@ -44,6 +44,61 @@ apply_migrations() {
 
 apply_migrations
 
+start_detached() {
+  local work_dir="$1"
+  local log_file="$2"
+  local pid_file="$3"
+  shift 3
+
+  "$ROOT_DIR/.venv/bin/python" - "$work_dir" "$log_file" "$pid_file" "$@" <<'PY'
+import subprocess
+import sys
+from pathlib import Path
+
+work_dir, log_file, pid_file, *command = sys.argv[1:]
+
+log_path = Path(log_file)
+pid_path = Path(pid_file)
+
+with log_path.open("ab", buffering=0) as log_handle:
+    process = subprocess.Popen(
+        command,
+        cwd=work_dir,
+        stdin=subprocess.DEVNULL,
+        stdout=log_handle,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+        close_fds=True,
+    )
+
+pid_path.write_text(f"{process.pid}\n", encoding="utf-8")
+PY
+}
+
+assert_pid_running() {
+  local pid_file="$1"
+  local name="$2"
+  local log_file="$3"
+  local pid
+  pid="$(cat "$pid_file")"
+
+  if [[ -z "$pid" ]] || ! kill -0 "$pid" >/dev/null 2>&1; then
+    echo "${name} exited unexpectedly. Recent logs:" >&2
+    tail -n 40 "$log_file" >&2 || true
+    return 1
+  fi
+}
+
+verify_started_processes() {
+  local pid_file
+  for pid_file in "$PID_DIR"/*.pid; do
+    [[ -f "$pid_file" ]] || continue
+    local name
+    name="$(basename "$pid_file" .pid)"
+    assert_pid_running "$pid_file" "$name" "$LOG_DIR/${name}.log" || return 1
+  done
+}
+
 start_backend() {
   local name="$1"
   local service_dir="$2"
@@ -55,27 +110,27 @@ start_backend() {
   : >"$log_file"
   rm -f "$pid_file"
 
-  (
-    cd "$service_dir"
-    nohup env \
-      SERVICE_NAME="$name" \
-      API_PORT="$port" \
-      LOG_LEVEL="$LOG_LEVEL" \
-      JWT_SECRET_KEY="$JWT_SECRET_KEY" \
-      POSTGRES_DSN="$POSTGRES_DSN" \
-      RABBITMQ_URL="$RABBITMQ_URL" \
-      REDIS_URL="$REDIS_URL" \
-      ML_INFERENCE_URL="$ML_INFERENCE_URL" \
-      FEATURE_ENRICHMENT_URL="$FEATURE_ENRICHMENT_URL" \
-      DATA_CONNECTOR_URL="$DATA_CONNECTOR_URL" \
-      API_GATEWAY_URL="$API_GATEWAY_URL" \
-      CONTROL_API_URL="$CONTROL_API_URL" \
-      RABBITMQ_QUEUE_TYPE="$RABBITMQ_QUEUE_TYPE" \
-      CORS_ALLOW_ORIGINS="$CORS_ALLOW_ORIGINS" \
-      "$@" \
-      uvicorn app.main:app --host 0.0.0.0 --port "$port" >"$log_file" 2>&1 &
-    echo $! >"$pid_file"
-  )
+  start_detached \
+    "$service_dir" \
+    "$log_file" \
+    "$pid_file" \
+    env \
+    SERVICE_NAME="$name" \
+    API_PORT="$port" \
+    LOG_LEVEL="$LOG_LEVEL" \
+    JWT_SECRET_KEY="$JWT_SECRET_KEY" \
+    POSTGRES_DSN="$POSTGRES_DSN" \
+    RABBITMQ_URL="$RABBITMQ_URL" \
+    REDIS_URL="$REDIS_URL" \
+    ML_INFERENCE_URL="$ML_INFERENCE_URL" \
+    FEATURE_ENRICHMENT_URL="$FEATURE_ENRICHMENT_URL" \
+    DATA_CONNECTOR_URL="$DATA_CONNECTOR_URL" \
+    API_GATEWAY_URL="$API_GATEWAY_URL" \
+    CONTROL_API_URL="$CONTROL_API_URL" \
+    RABBITMQ_QUEUE_TYPE="$RABBITMQ_QUEUE_TYPE" \
+    CORS_ALLOW_ORIGINS="$CORS_ALLOW_ORIGINS" \
+    "$@" \
+    uvicorn app.main:app --host 0.0.0.0 --port "$port"
 }
 
 start_frontend_app() {
@@ -91,17 +146,17 @@ start_frontend_app() {
   : >"$log_file"
   rm -f "$pid_file"
 
-  (
-    cd "$app_dir"
-    nohup env \
-      PORT="$port" \
-      VITE_API_BASE_URL="$api_base" \
-      VITE_WS_BASE_URL="$ws_base" \
-      VITE_MONITORING_APP_URL="$monitoring_url" \
-      VITE_CONTROL_API_BASE_URL="$control_api_base" \
-      npm run dev >"$log_file" 2>&1 &
-    echo $! >"$pid_file"
-  )
+  start_detached \
+    "$app_dir" \
+    "$log_file" \
+    "$pid_file" \
+    env \
+    PORT="$port" \
+    VITE_API_BASE_URL="$api_base" \
+    VITE_WS_BASE_URL="$ws_base" \
+    VITE_MONITORING_APP_URL="$monitoring_url" \
+    VITE_CONTROL_API_BASE_URL="$control_api_base" \
+    npm run dev
 }
 
 wait_for_url() {
@@ -199,8 +254,11 @@ else
   echo "         Falling back to direct localhost ports." >&2
 fi
 
+verify_started_processes
+
 echo
 echo "Local dev stack is running."
+echo "Release smoke: use docker compose up -d --build"
 echo "Dashboard:  http://app.localhost"
 echo "Control:    http://control.localhost"
 echo "Ops:        http://ops-control.localhost"
