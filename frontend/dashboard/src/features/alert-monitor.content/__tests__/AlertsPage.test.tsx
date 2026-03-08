@@ -7,7 +7,7 @@ const mockFetchAlerts = vi.fn();
 const mockFetchAlertDetail = vi.fn();
 
 vi.mock('../../../app/state/auth-context', () => ({
-  useAuth: () => ({ token: 'test-token' })
+  useAuth: () => ({ token: 'test-token', tenantId: 'tenant-alpha' })
 }));
 
 vi.mock('../../../app/state/ui-context', () => ({

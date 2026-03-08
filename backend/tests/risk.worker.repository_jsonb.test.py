@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import sys
 from pathlib import Path
 from uuid import uuid4
 
@@ -16,6 +17,10 @@ worker_repo_path = (
     / "infrastructure"
     / "event_repository_v2.py"
 )
+worker_service_root = worker_repo_path.parents[2]
+if str(worker_service_root) not in sys.path:
+    sys.path.insert(0, str(worker_service_root))
+
 spec = importlib.util.spec_from_file_location("risk_worker_event_repository_v2", worker_repo_path)
 if spec is None or spec.loader is None:
     raise RuntimeError("Failed to load worker repository module")
@@ -106,4 +111,25 @@ async def test_persist_decision_casts_and_serializes_decision_payload(monkeypatc
     insert_sql, insert_params = session.calls[0]
     assert "CAST(:decision_payload AS JSONB)" in insert_sql
     assert json.loads(insert_params["decision_payload"]) == payload
+    assert "UPDATE events_v2" in session.calls[1][0]
+    assert "UPDATE events" in session.calls[2][0]
+    assert session.commits == 1
+
+
+@pytest.mark.asyncio
+async def test_mark_failed_v2_updates_legacy_event_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_set_tenant_context(session, tenant_id):
+        return None
+
+    monkeypatch.setattr(repository_v2, "set_tenant_context", fake_set_tenant_context)
+    session = _FakeSession()
+
+    await repository_v2.mark_failed_v2(
+        session,
+        tenant_id="tenant-alpha",
+        event_id=uuid4(),
+    )
+
+    assert "UPDATE events_v2" in session.calls[0][0]
+    assert "UPDATE events" in session.calls[1][0]
     assert session.commits == 1

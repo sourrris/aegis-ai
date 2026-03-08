@@ -78,16 +78,8 @@ async def _ingest_single_event(
     )
     await EventIngestionService.persist_event(session, legacy_envelope, submitted_by=claims.sub)
 
-    await publish_json_with_compat(
-        channel=channel,
-        exchange_name=settings.rabbitmq_events_exchange,
-        routing_key=settings.rabbitmq_events_routing_key,
-        payload=legacy_envelope.model_dump(mode="json"),
-        headers={"x-retry-count": 0, "x-schema-version": 1},
-        legacy_exchange_name=settings.rabbitmq_events_exchange_legacy,
-        legacy_routing_key=settings.rabbitmq_events_routing_key_legacy,
-    )
-
+    # Persist a legacy-compatible event row for monitoring surfaces, but only queue
+    # the v2 worker to avoid double-processing the same logical event.
     await publish_json_with_compat(
         channel=channel,
         exchange_name=settings.rabbitmq_events_exchange,

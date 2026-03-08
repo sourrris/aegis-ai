@@ -15,10 +15,18 @@ http://{$LOCAL_WS_DOMAIN} {
 }
 
 http://{$LOCAL_CONTROL_DOMAIN} {
+    handle_path /monitoring-api/* {
+        reverse_proxy api-gateway:8000
+    }
+
     reverse_proxy control-tenant:5174
 }
 
 http://{$LOCAL_OPS_CONTROL_DOMAIN} {
+    handle_path /monitoring-api/* {
+        reverse_proxy api-gateway:8000
+    }
+
     reverse_proxy control-ops:5175
 }
 

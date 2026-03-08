@@ -18,3 +18,19 @@ export async function login(username: string, password: string) {
     }
   );
 }
+
+export async function register(username: string, password: string, organizationName: string) {
+  return requestJson(
+    '/v1/auth/register',
+    tokenResponseSchema,
+    {
+      method: 'POST',
+      credentials: 'include',
+      body: {
+        username,
+        password,
+        organization_name: organizationName
+      }
+    }
+  );
+}

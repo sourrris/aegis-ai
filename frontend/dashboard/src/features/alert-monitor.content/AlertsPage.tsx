@@ -6,6 +6,7 @@ import { useLiveAlertState } from '../../app/state/live-alerts-context';
 import { useUI } from '../../app/state/ui-context';
 import { fetchAlertDetail, fetchAlerts } from '../../shared/api/alerts';
 import { formatDateTime } from '../../shared/lib/time';
+import { resolveTenantSelection } from '../../shared/lib/tenant';
 import { Badge } from '../../shared/ui/badge';
 import { Button } from '../../shared/ui/button';
 import { DataPanel } from '../../shared/ui/DataPanel';
@@ -39,9 +40,10 @@ function sortMarker(key: SortKey, activeKey: SortKey, direction: SortDirection) 
 }
 
 export function AlertsPage() {
-  const { token } = useAuth();
+  const { token, tenantId } = useAuth();
   const { tenant, timezone } = useUI();
   const live = useLiveAlertState();
+  const resolvedTenant = resolveTenantSelection(tenant, tenantId);
 
   const [severity, setSeverity] = useState('');
   const [modelVersion, setModelVersion] = useState('');
@@ -55,7 +57,7 @@ export function AlertsPage() {
 
   const filters = useMemo(
     () => ({
-      tenant_id: tenant === 'all' ? undefined : tenant,
+      tenant_id: resolvedTenant,
       severity: severity || undefined,
       model_version: modelVersion || undefined,
       score_min: scoreMin ? Number(scoreMin) : undefined,
@@ -63,7 +65,7 @@ export function AlertsPage() {
       cursor,
       limit: 20
     }),
-    [cursor, modelVersion, scoreMax, scoreMin, severity, tenant]
+    [cursor, modelVersion, resolvedTenant, scoreMax, scoreMin, severity]
   );
 
   const alertsQuery = useQuery({

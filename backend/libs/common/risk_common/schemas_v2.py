@@ -10,6 +10,10 @@ class AuthClaims(BaseModel):
     tenant_id: str
     roles: list[str] = Field(default_factory=list)
     scopes: list[str] = Field(default_factory=list)
+    api_key_id: str | None = None
+    key_prefix: str | None = None
+    domain_id: str | None = None
+    domain_hostname: str | None = None
 
 
 class TokenPairResponse(BaseModel):

@@ -65,11 +65,16 @@ async def get_event_status(
 @router.get("")
 async def list_events(
     tenant_id: str | None = Query(default=None),
+    domain_id: str | None = Query(default=None),
     status: str | None = Query(default=None),
+    severity: str | None = Query(default=None),
     source: str | None = Query(default=None),
     event_type: str | None = Query(default=None),
+    start_date: datetime | None = Query(default=None),
+    end_date: datetime | None = Query(default=None),
     from_ts: datetime | None = Query(default=None, alias="from"),
     to_ts: datetime | None = Query(default=None, alias="to"),
+    page: int | None = Query(default=None, ge=1),
     cursor: str | None = Query(default=None),
     limit: int = Query(default=25, ge=1, le=200),
     _: str = Depends(get_current_subject),
@@ -78,11 +83,14 @@ async def list_events(
     return await EventRepository.list_events(
         session,
         tenant_id=tenant_id,
+        domain_id=domain_id,
         status=status,
+        severity=severity,
         source=source,
         event_type=event_type,
-        from_ts=from_ts,
-        to_ts=to_ts,
+        from_ts=start_date or from_ts,
+        to_ts=end_date or to_ts,
+        page=page,
         cursor=cursor,
         limit=limit,
     )

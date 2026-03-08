@@ -4,7 +4,7 @@ export const CONTROL_TENANT_URL = import.meta.env.VITE_CONTROL_TENANT_URL ?? 'ht
 export const CONTROL_OPS_URL = import.meta.env.VITE_CONTROL_OPS_URL ?? 'http://ops-control.localhost';
 
 export const TENANT_OPTIONS = ['all', 'tenant-alpha', 'tenant-beta'] as const;
-export type TenantOption = (typeof TENANT_OPTIONS)[number];
+export type TenantOption = string;
 
 export const WINDOW_OPTIONS = ['1h', '24h', '7d'] as const;
 export type WindowOption = (typeof WINDOW_OPTIONS)[number];

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, LogOut } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../app/state/auth-context';
@@ -9,7 +9,8 @@ import { useUI } from '../../app/state/ui-context';
 import { resolveTenantConfig } from '../../config/tenant.config';
 import { ingestSyntheticEvent } from '../../shared/api/alerts';
 import { fetchDataSourceRuns } from '../../shared/api/data-sources';
-import { TENANT_OPTIONS, WINDOW_OPTIONS } from '../../shared/lib/constants';
+import { WINDOW_OPTIONS } from '../../shared/lib/constants';
+import { buildTenantOptions, resolveTenantSelection } from '../../shared/lib/tenant';
 import { AmbientBackground } from '../../shared/ui/AmbientBackground';
 import { Badge } from '../../shared/ui/badge';
 import { Button } from '../../shared/ui/button';
@@ -33,11 +34,13 @@ type AutoIngestToast = {
 };
 
 export function AppShell() {
-  const { clearSession, token, username } = useAuth();
+  const { clearSession, token, username, tenantId } = useAuth();
   const { tenant, setTenant, window: selectedWindow, setWindow } = useUI();
   const { connected, stale, alerts } = useLiveAlertState();
   const tenantConfig = resolveTenantConfig(tenant);
   const navItems = NAV_ITEMS.filter((item) => tenantConfig.features.nav[item.key]);
+  const availableTenants = useMemo<string[]>(() => buildTenantOptions(tenantId, tenant), [tenant, tenantId]);
+  const resolvedTenant = resolveTenantSelection(tenant, tenantId) ?? 'tenant-alpha';
   const [lastQueuedAck, setLastQueuedAck] = useState<{ eventId: string; queued: boolean; status: string } | null>(
     null
   );
@@ -126,7 +129,7 @@ export function AppShell() {
       if (!token) {
         throw new Error('No auth token');
       }
-      return ingestSyntheticEvent(token, tenant);
+      return ingestSyntheticEvent(token, resolvedTenant);
     },
     onSuccess: (result) => {
       setLastQueuedAck({
@@ -204,7 +207,7 @@ export function AppShell() {
             <Input placeholder="Search events, alerts, model versions" aria-label="Global search" className="ops-search" />
 
             <Select value={tenant} onChange={(event) => setTenant(event.target.value as typeof tenant)}>
-              {TENANT_OPTIONS.map((item) => (
+              {availableTenants.map((item) => (
                 <option key={item} value={item}>
                   {item}
                 </option>

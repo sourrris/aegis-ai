@@ -7,7 +7,9 @@ import { useUI } from '../../app/state/ui-context';
 import type { DataSourceStatus } from '../../entities/data-sources';
 import { fetchDataSourceRuns, fetchDataSourceStatus } from '../../shared/api/data-sources';
 import { fetchEventDetail, fetchEvents } from '../../shared/api/events';
+import { fetchDomains } from '../../shared/api/setup';
 import { formatDateTime } from '../../shared/lib/time';
+import { resolveTenantSelection } from '../../shared/lib/tenant';
 import { Badge } from '../../shared/ui/badge';
 import { Button } from '../../shared/ui/button';
 import { DataPanel } from '../../shared/ui/DataPanel';
@@ -32,19 +34,34 @@ const connectorStatusVariant: Record<string, 'neutral' | 'info' | 'warning' | 'c
   degraded: 'warning'
 };
 
+const severityVariant: Record<string, 'neutral' | 'info' | 'warning' | 'critical' | 'success'> = {
+  critical: 'critical',
+  high: 'warning',
+  medium: 'info',
+  low: 'success'
+};
+
 const KEY_GATED_OR_PAID_SOURCES = new Set<string>([]);
 
+function toUtcDateBoundary(date: string, boundary: 'start' | 'end') {
+  return new Date(`${date}T${boundary === 'start' ? '00:00:00.000' : '23:59:59.999'}Z`).toISOString();
+}
+
 export function EventsPage() {
-  const { token } = useAuth();
+  const { token, tenantId } = useAuth();
   const { tenant, timezone } = useUI();
   const live = useLiveAlertState();
+  const resolvedTenant = resolveTenantSelection(tenant, tenantId);
 
   const [status, setStatus] = useState('');
+  const [domainId, setDomainId] = useState('');
+  const [severity, setSeverity] = useState('');
   const [source, setSource] = useState('');
   const [eventType, setEventType] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [eventIdSearch, setEventIdSearch] = useState('');
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
-  const [history, setHistory] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [runsWindow, setRunsWindow] = useState<'24h' | '7d' | 'all'>('24h');
   const [errorsOnly, setErrorsOnly] = useState(false);
@@ -52,15 +69,26 @@ export function EventsPage() {
 
   const filters = useMemo(
     () => ({
-      tenant_id: tenant === 'all' ? undefined : tenant,
+      tenant_id: resolvedTenant,
+      domain_id: domainId || undefined,
       status: status || undefined,
+      severity: severity || undefined,
       source: source || undefined,
       event_type: eventType || undefined,
-      cursor,
+      start_date: startDate ? toUtcDateBoundary(startDate, 'start') : undefined,
+      end_date: endDate ? toUtcDateBoundary(endDate, 'end') : undefined,
+      page,
       limit: 20
     }),
-    [cursor, eventType, source, status, tenant]
+    [domainId, endDate, eventType, page, resolvedTenant, severity, source, startDate, status]
   );
+
+  const domainsQuery = useQuery({
+    queryKey: ['tenant-domains'],
+    queryFn: async () => fetchDomains(token!),
+    enabled: Boolean(token),
+    retry: false
+  });
 
   const eventsQuery = useQuery({
     queryKey: ['events', filters],
@@ -95,6 +123,10 @@ export function EventsPage() {
   const rows = (eventsQuery.data?.items ?? []).filter((item) =>
     eventIdSearch ? item.event_id.toLowerCase().includes(eventIdSearch.toLowerCase()) : true
   );
+  const domains = domainsQuery.data?.items ?? [];
+  const activeFilterCount = [domainId, status, severity, source, eventType, startDate, endDate, eventIdSearch].filter(
+    Boolean
+  ).length;
 
   const sourceStatusMap = useMemo(() => {
     const map = new Map<string, DataSourceStatus>();
@@ -156,26 +188,126 @@ export function EventsPage() {
         <div className="inline-actions">
           <Badge variant={live.connected ? 'success' : 'critical'}>{live.connected ? 'live' : 'offline'}</Badge>
           <Badge variant="info">events {eventsQuery.data?.total_estimate ?? 0}</Badge>
+          <Badge variant="neutral">filters {activeFilterCount}</Badge>
+          <Badge variant="neutral">
+            page {eventsQuery.data?.page ?? page}/{eventsQuery.data?.total_pages ?? 1}
+          </Badge>
           <Badge variant="neutral">source runs {filteredSourceRuns.length}</Badge>
         </div>
       }
     >
-      <DataPanel title="Event lifecycle" description="Historical ingestion and processing states with event-level lookup.">
+      <DataPanel
+        title="Event lifecycle"
+        description="Historical ingestion and processing states with domain, severity, and date filters."
+        actions={
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setDomainId('');
+              setStatus('');
+              setSeverity('');
+              setSource('');
+              setEventType('');
+              setStartDate('');
+              setEndDate('');
+              setEventIdSearch('');
+              setPage(1);
+            }}
+            disabled={activeFilterCount === 0 && page === 1}
+          >
+            Clear filters
+          </Button>
+        }
+      >
         <div className="table-toolbar">
-          <Select value={status} onChange={(event) => setStatus(event.target.value)}>
+          <Select
+            aria-label="Domain filter"
+            value={domainId}
+            onChange={(event) => {
+              setDomainId(event.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">Domain (all)</option>
+            {domains.map((item) => (
+              <option key={item.domain_id} value={item.domain_id}>
+                {item.hostname}
+              </option>
+            ))}
+          </Select>
+          <Select
+            aria-label="Status filter"
+            value={status}
+            onChange={(event) => {
+              setStatus(event.target.value);
+              setPage(1);
+            }}
+          >
             <option value="">Status (all)</option>
             <option value="queued">queued</option>
             <option value="processed">processed</option>
             <option value="anomaly">anomaly</option>
             <option value="failed">failed</option>
           </Select>
-          <Input value={source} onChange={(event) => setSource(event.target.value)} placeholder="Source" />
-          <Input value={eventType} onChange={(event) => setEventType(event.target.value)} placeholder="Event type" />
-          <Input value={eventIdSearch} onChange={(event) => setEventIdSearch(event.target.value)} placeholder="Search event_id" />
+          <Select
+            aria-label="Severity filter"
+            value={severity}
+            onChange={(event) => {
+              setSeverity(event.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">Severity (all)</option>
+            <option value="critical">critical</option>
+            <option value="high">high</option>
+            <option value="medium">medium</option>
+            <option value="low">low</option>
+          </Select>
+          <Input
+            aria-label="Source filter"
+            value={source}
+            onChange={(event) => {
+              setSource(event.target.value);
+              setPage(1);
+            }}
+            placeholder="Source"
+          />
+          <Input
+            aria-label="Event type filter"
+            value={eventType}
+            onChange={(event) => {
+              setEventType(event.target.value);
+              setPage(1);
+            }}
+            placeholder="Event type"
+          />
+          <Input
+            aria-label="Start date filter"
+            value={startDate}
+            onChange={(event) => {
+              setStartDate(event.target.value);
+              setPage(1);
+            }}
+            type="date"
+          />
+          <Input
+            aria-label="End date filter"
+            value={endDate}
+            onChange={(event) => {
+              setEndDate(event.target.value);
+              setPage(1);
+            }}
+            type="date"
+          />
+          <Input
+            aria-label="Event id search"
+            value={eventIdSearch}
+            onChange={(event) => setEventIdSearch(event.target.value)}
+            placeholder="Search event_id"
+          />
           <Button
             onClick={() => {
-              setCursor(undefined);
-              setHistory([]);
+              setPage(1);
             }}
           >
             Apply filters
@@ -191,6 +323,9 @@ export function EventsPage() {
                 <th scope="col">Type</th>
                 <th scope="col">Status</th>
                 <th scope="col">Source</th>
+                <th scope="col">Domain</th>
+                <th scope="col">Severity</th>
+                <th scope="col">Risk</th>
                 <th scope="col">Ingested</th>
               </tr>
             </thead>
@@ -208,33 +343,48 @@ export function EventsPage() {
                     <Badge variant={statusVariant[item.status] ?? 'neutral'}>{item.status}</Badge>
                   </td>
                   <td>{item.source}</td>
+                  <td>{item.domain_hostname ?? 'n/a'}</td>
+                  <td>
+                    {item.severity ? (
+                      <Badge variant={severityVariant[item.severity] ?? 'neutral'}>{item.severity}</Badge>
+                    ) : (
+                      'n/a'
+                    )}
+                  </td>
+                  <td>{item.risk_score != null ? item.risk_score.toFixed(3) : 'n/a'}</td>
                   <td>{formatDateTime(item.ingested_at, timezone)}</td>
                 </tr>
               ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="muted">
+                    No events match current filters.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
 
         <div className="pager-row">
-          <span className="muted">Total estimate: {eventsQuery.data?.total_estimate ?? 0}</span>
+          <span className="muted">
+            Page {eventsQuery.data?.page ?? page} of {eventsQuery.data?.total_pages ?? 1}. Total estimate:{' '}
+            {eventsQuery.data?.total_estimate ?? 0}
+          </span>
           <div className="pager-actions">
             <Button
               onClick={() => {
-                const previous = history[history.length - 1];
-                setCursor(previous);
-                setHistory((current) => current.slice(0, -1));
+                setPage((current) => Math.max(1, current - 1));
               }}
-              disabled={history.length === 0}
+              disabled={(eventsQuery.data?.page ?? page) <= 1}
             >
               Previous
             </Button>
             <Button
               onClick={() => {
-                if (!eventsQuery.data?.next_cursor) return;
-                setHistory((current) => [...current, cursor ?? '']);
-                setCursor(eventsQuery.data.next_cursor ?? undefined);
+                setPage((current) => current + 1);
               }}
-              disabled={!eventsQuery.data?.next_cursor}
+              disabled={(eventsQuery.data?.page ?? page) >= (eventsQuery.data?.total_pages ?? 1)}
             >
               Next
             </Button>
@@ -336,6 +486,30 @@ export function EventsPage() {
                 </p>
                 <p className="mono">Submitted by {eventDetailQuery.data.submitted_by}</p>
               </div>
+
+              {(eventDetailQuery.data.risk_score != null || eventDetailQuery.data.risk_level) && (
+                <div className="grid grid-cols-1 gap-2 rounded-2xl border border-stroke bg-zinc-50 p-3 text-sm sm:grid-cols-2">
+                  <p>
+                    Risk score{' '}
+                    <strong>
+                      {eventDetailQuery.data.risk_score != null ? eventDetailQuery.data.risk_score.toFixed(3) : 'n/a'}
+                    </strong>
+                  </p>
+                  <p>
+                    Risk level <strong>{eventDetailQuery.data.risk_level ?? 'n/a'}</strong>
+                  </p>
+                  {eventDetailQuery.data.decision_latency_ms != null && (
+                    <p>
+                      Decision latency <strong>{eventDetailQuery.data.decision_latency_ms}ms</strong>
+                    </p>
+                  )}
+                  {eventDetailQuery.data.reasons && eventDetailQuery.data.reasons.length > 0 && (
+                    <p>
+                      Reasons <strong>{eventDetailQuery.data.reasons.join(', ')}</strong>
+                    </p>
+                  )}
+                </div>
+              )}
 
               <pre className="json-block">{JSON.stringify(eventDetailQuery.data.payload, null, 2)}</pre>
 

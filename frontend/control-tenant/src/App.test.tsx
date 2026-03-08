@@ -99,6 +99,7 @@ describe('tenant control console', () => {
 
   beforeEach(() => {
     (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    window.history.replaceState({}, '', '/');
 
     const originalLocalStorage = window.localStorage;
     const storage = new Map<string, string>();
@@ -196,6 +197,73 @@ describe('tenant control console', () => {
       expectText('Sign in through the monitoring app first.');
       expectText('Open Monitoring Login');
     });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/monitoring-api/v1/auth/refresh',
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include'
+      })
+    );
+  });
+
+  it('hydrates the session from a control handoff hash', async () => {
+    const handedOffToken = createJwt({
+      sub: 'tenant@example.com',
+      tenant_id: 'tenant-alpha',
+      roles: ['admin'],
+      scopes: ['control:config:read'],
+      exp: Math.floor(Date.now() / 1000) + 3600
+    });
+    window.history.replaceState(
+      {},
+      '',
+      `/workspace/overview#aegis-handoff:token=${encodeURIComponent(handedOffToken)}&username=tenant%40example.com`
+    );
+
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/control/v1/tenants/tenant-alpha/configuration')) {
+        return jsonResponse({
+          tenant_id: 'tenant-alpha',
+          anomaly_threshold: 0.82,
+          enabled_connectors: ['ofac_sls'],
+          model_version: '20260301000000',
+          rule_overrides_json: { high_amount_threshold: 10000 },
+          version: 2,
+          updated_at: '2026-03-07T00:00:00Z'
+        });
+      }
+      if (url.endsWith('/control/v1/connectors/catalog')) {
+        return jsonResponse([]);
+      }
+      if (url.endsWith('/control/v1/tenants/tenant-alpha/reconciliation/ingestion')) {
+        return jsonResponse({
+          tenant_id: 'tenant-alpha',
+          mismatch_count: 0,
+          last_compared_at: '2026-03-07T00:00:00Z',
+          compared_window_start: '2026-03-06T00:00:00Z',
+          compared_window_end: '2026-03-07T00:00:00Z',
+          missing_event_ids: [],
+          unexpected_event_ids: []
+        });
+      }
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    await renderApp('/workspace/overview');
+
+    await waitFor(() => {
+      expectText('Tenant Workspace');
+      expectText('tenant@example.com');
+      expect(window.location.hash).toBe('');
+      expect(window.localStorage.getItem('risk_username')).toBe('tenant@example.com');
+    });
+
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/monitoring-api/v1/auth/refresh',
+      expect.anything()
+    );
   });
 
   it('renders the workspace overview with mocked control-api responses', async () => {

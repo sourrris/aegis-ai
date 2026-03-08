@@ -6,8 +6,23 @@ import { normalizeLiveAlert, wsEnvelopeSchema, systemNoticeSchema, wsAlertPayloa
 import type { useToast } from '../ui/toaster';
 import { WS_BASE_URL } from '../lib/constants';
 
+function readTenantId(token: string) {
+  const parts = token.split('.');
+  if (parts.length < 2) {
+    return null;
+  }
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const normalized = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+    const payload = JSON.parse(window.atob(normalized)) as Record<string, unknown>;
+    return typeof payload.tenant_id === 'string' ? payload.tenant_id : null;
+  } catch {
+    return null;
+  }
+}
+
 function toWsUrl(base: string, token: string, tenant: string) {
-  const resolvedTenant = tenant === 'all' ? 'tenant-alpha' : tenant;
+  const resolvedTenant = tenant === 'all' ? readTenantId(token) ?? 'tenant-alpha' : tenant;
   return `${base.replace(/^http/, 'ws')}/ws/risk-stream?channels=alerts,metrics&token=${encodeURIComponent(token)}&tenant_id=${encodeURIComponent(resolvedTenant)}`;
 }
 

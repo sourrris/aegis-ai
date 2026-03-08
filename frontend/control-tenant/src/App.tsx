@@ -4,7 +4,8 @@ import { Navigate, NavLink, Route, Routes } from 'react-router-dom';
 
 import { ControlApiClient } from '../../packages/control-api-client/src/client';
 import type { TenantConfigurationDTO } from '../../packages/control-api-client/src/types';
-import { buildMonitoringLoginUrl } from '../../packages/control-auth/src/handoff';
+import { buildMonitoringLoginUrl, consumeControlHandoff } from '../../packages/control-auth/src/handoff';
+import { refreshAccessTokenOnce } from '../../packages/control-auth/src/refresh';
 import { parseAuthSession } from '../../packages/control-auth/src/session';
 import { getTenantPageMeta, TENANT_HOME_PATH, TENANT_PAGE_META } from './page-meta';
 import {
@@ -29,7 +30,7 @@ import {
 
 const CONTROL_API_BASE_URL = import.meta.env.VITE_CONTROL_API_BASE_URL ?? 'http://control-api.localhost';
 const MONITORING_APP_URL = import.meta.env.VITE_MONITORING_APP_URL ?? 'http://app.localhost';
-const MONITORING_API_BASE_URL = import.meta.env.VITE_MONITORING_API_BASE_URL ?? 'http://api.localhost';
+const MONITORING_API_BASE_URL = import.meta.env.VITE_MONITORING_API_BASE_URL ?? '/monitoring-api';
 
 type SessionState = {
   token: string | null;
@@ -42,6 +43,22 @@ type SessionBootstrapState = SessionState & {
 };
 
 function getSessionState(): SessionState {
+  const handoff = consumeControlHandoff();
+  if (handoff) {
+    const handedOffSession = parseAuthSession(handoff.token, handoff.username);
+    if (handedOffSession.token) {
+      window.localStorage.setItem('risk_token', handedOffSession.token);
+      if (handedOffSession.username) {
+        window.localStorage.setItem('risk_username', handedOffSession.username);
+      }
+      return {
+        token: handedOffSession.token,
+        username: handedOffSession.username,
+        tenantId: handedOffSession.tenantId ?? 'tenant-alpha'
+      };
+    }
+  }
+
   const token = window.localStorage.getItem('risk_token');
   const username = window.localStorage.getItem('risk_username');
   const session = parseAuthSession(token, username);
@@ -53,21 +70,12 @@ function getSessionState(): SessionState {
 }
 
 async function refreshMonitoringSession(): Promise<SessionState | null> {
-  const response = await fetch(`${MONITORING_API_BASE_URL}/v1/auth/refresh`, {
-    method: 'POST',
-    credentials: 'include'
-  });
-
-  if (!response.ok) {
+  const accessToken = await refreshAccessTokenOnce(MONITORING_API_BASE_URL);
+  if (!accessToken) {
     return null;
   }
 
-  const payload = (await response.json()) as { access_token?: string };
-  if (!payload.access_token) {
-    return null;
-  }
-
-  const session = parseAuthSession(payload.access_token, window.localStorage.getItem('risk_username'));
+  const session = parseAuthSession(accessToken, window.localStorage.getItem('risk_username'));
   if (!session.token) {
     return null;
   }

@@ -152,6 +152,12 @@ async def ingest_platform_event(
     channel=Depends(get_rabbit_channel),
 ) -> EventIngestResult:
     standardized = _build_standardized_transaction(payload, tenant_id=claims.tenant_id)
+    if claims.domain_hostname:
+        standardized.metadata_json.setdefault("registered_domain", claims.domain_hostname)
+    if claims.domain_id:
+        standardized.metadata_json.setdefault("registered_domain_id", claims.domain_id)
+    if claims.key_prefix:
+        standardized.metadata_json.setdefault("ingest_api_key", claims.key_prefix)
     event = standardized.to_risk_event_ingest_request(
         event_type=payload.event_type,
         idempotency_key=payload.idempotency_key,

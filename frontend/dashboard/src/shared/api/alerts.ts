@@ -25,7 +25,7 @@ export async function ingestSyntheticEvent(token: string, tenantId: string) {
     queued: z.boolean()
   });
 
-  const resolvedTenant = tenantId === 'all' ? 'tenant-alpha' : tenantId;
+  const resolvedTenant = tenantId;
   const eventSuffix = Math.floor(Math.random() * 1_000_000)
     .toString()
     .padStart(6, '0');

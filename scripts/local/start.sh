@@ -30,6 +30,7 @@ DATA_CONNECTOR_URL="${DATA_CONNECTOR_URL:-http://localhost:8030}"
 API_GATEWAY_URL="${API_GATEWAY_URL:-http://localhost:8000}"
 CONTROL_API_URL="${CONTROL_API_URL:-http://localhost:8060}"
 CORS_ALLOW_ORIGINS="${CORS_ALLOW_ORIGINS:-http://app.localhost,http://control.localhost,http://ops-control.localhost,http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://localhost:5175}"
+AUTH_COOKIE_DOMAIN="${AUTH_COOKIE_DOMAIN:-localhost}"
 RABBITMQ_QUEUE_TYPE="${RABBITMQ_QUEUE_TYPE:-classic}"
 MODEL_DIR="${MODEL_DIR:-$ROOT_DIR/.local/models}"
 mkdir -p "$MODEL_DIR"
@@ -129,6 +130,7 @@ start_backend() {
     CONTROL_API_URL="$CONTROL_API_URL" \
     RABBITMQ_QUEUE_TYPE="$RABBITMQ_QUEUE_TYPE" \
     CORS_ALLOW_ORIGINS="$CORS_ALLOW_ORIGINS" \
+    AUTH_COOKIE_DOMAIN="$AUTH_COOKIE_DOMAIN" \
     "$@" \
     uvicorn app.main:app --host 0.0.0.0 --port "$port"
 }
@@ -141,6 +143,7 @@ start_frontend_app() {
   local ws_base="$5"
   local monitoring_url="$6"
   local control_api_base="$7"
+  local monitoring_api_base="${8:-}"
   local log_file="$LOG_DIR/${name}.log"
   local pid_file="$PID_DIR/${name}.pid"
   : >"$log_file"
@@ -156,6 +159,8 @@ start_frontend_app() {
     VITE_WS_BASE_URL="$ws_base" \
     VITE_MONITORING_APP_URL="$monitoring_url" \
     VITE_CONTROL_API_BASE_URL="$control_api_base" \
+    VITE_MONITORING_API_BASE_URL="$monitoring_api_base" \
+    MONITORING_API_PROXY_TARGET="$API_GATEWAY_URL" \
     npm run dev
 }
 
@@ -234,8 +239,8 @@ ensure_port_free "5173" "dashboard"
 ensure_port_free "5174" "control-tenant"
 ensure_port_free "5175" "control-ops"
 start_frontend_app "dashboard" "$ROOT_DIR/frontend/dashboard" "5173" "http://api.localhost" "http://ws.localhost" "http://app.localhost" "http://control-api.localhost"
-start_frontend_app "control-tenant" "$ROOT_DIR/frontend/control-tenant" "5174" "http://api.localhost" "http://ws.localhost" "http://app.localhost" "http://control-api.localhost"
-start_frontend_app "control-ops" "$ROOT_DIR/frontend/control-ops" "5175" "http://api.localhost" "http://ws.localhost" "http://app.localhost" "http://control-api.localhost"
+start_frontend_app "control-tenant" "$ROOT_DIR/frontend/control-tenant" "5174" "http://api.localhost" "http://ws.localhost" "http://app.localhost" "http://control-api.localhost" "/monitoring-api"
+start_frontend_app "control-ops" "$ROOT_DIR/frontend/control-ops" "5175" "http://api.localhost" "http://ws.localhost" "http://app.localhost" "http://control-api.localhost" "/monitoring-api"
 wait_for_url "http://localhost:5173" "Dashboard" 120
 wait_for_url "http://localhost:5174" "Control Tenant Console" 120
 wait_for_url "http://localhost:5175" "Control Ops Console" 120

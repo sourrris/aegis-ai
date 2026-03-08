@@ -258,6 +258,7 @@ services:
       SERVICE_NAME: api-gateway
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       CORS_ALLOW_ORIGINS: http://${LOCAL_APP_DOMAIN:-app.localhost},http://localhost:5173,http://127.0.0.1:5173
+      AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-localhost}
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       REDIS_URL: redis://redis:6379/0
       POSTGRES_DSN: postgresql+asyncpg://${POSTGRES_USER:-risk}:${POSTGRES_PASSWORD:-risk}@postgres:5432/${POSTGRES_DB:-risk_monitor}
@@ -378,6 +379,8 @@ services:
     environment:
       VITE_CONTROL_API_BASE_URL: http://${LOCAL_CONTROL_API_DOMAIN:-control-api.localhost}
       VITE_MONITORING_APP_URL: http://${LOCAL_APP_DOMAIN:-app.localhost}
+      VITE_MONITORING_API_BASE_URL: /monitoring-api
+      MONITORING_API_PROXY_TARGET: http://api-gateway:8000
     ports:
       - '5174:5174'
     depends_on:
@@ -392,6 +395,8 @@ services:
     environment:
       VITE_CONTROL_API_BASE_URL: http://${LOCAL_CONTROL_API_DOMAIN:-control-api.localhost}
       VITE_MONITORING_APP_URL: http://${LOCAL_APP_DOMAIN:-app.localhost}
+      VITE_MONITORING_API_BASE_URL: /monitoring-api
+      MONITORING_API_PROXY_TARGET: http://api-gateway:8000
       VITE_TENANT_CONSOLE_URL: http://${LOCAL_CONTROL_DOMAIN:-control.localhost}
     ports:
       - '5175:5175'
