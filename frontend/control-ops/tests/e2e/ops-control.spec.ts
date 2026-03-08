@@ -180,7 +180,7 @@ test.describe('ops control console', () => {
 
     await page.getByRole('link', { name: 'Audit' }).click();
     await expect(page.getByRole('heading', { name: 'Configuration Audit Trail' }).first()).toBeVisible();
-    await expect(page.getByText('ops@example.com')).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'ops@example.com' })).toBeVisible();
   });
 
   test('shows visible error state when the control API fails', async ({ page }) => {
