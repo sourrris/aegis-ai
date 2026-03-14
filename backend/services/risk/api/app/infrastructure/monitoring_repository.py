@@ -130,7 +130,7 @@ class UserRepository:
             params["tenant_id"] = requested_tenant_id
 
         rows = await session.execute(
-            text(  # nosec B608 — parameterized SQLAlchemy query, not user input
+            text(
                 """
                 SELECT utr.tenant_id, utr.role_name, COALESCE(r.scopes, ARRAY[]::text[]) AS scopes
                 FROM user_tenant_roles utr
@@ -410,7 +410,7 @@ class EventRepository:
         where_sql = " AND ".join(where_clauses)
 
         rows = await session.execute(
-            text(  # nosec B608 — parameterized SQLAlchemy query, not user input
+            text(
                 f"""
                 SELECT
                     e.event_id,
@@ -444,7 +444,7 @@ class EventRepository:
         )
 
         total = await session.execute(
-            text(  # nosec B608 — parameterized SQLAlchemy query, not user input
+            text(
                 f"""
                 SELECT COUNT(*) AS total
                 FROM events e
@@ -601,7 +601,7 @@ class MonitoringRepository:
             tenant_alerts_clause = " AND ev.tenant_id = :tenant_id "
 
         counts = await session.execute(
-            text(  # nosec B608 — parameterized SQLAlchemy query, not user input
+            text(
                 f"""
                 SELECT
                     COALESCE(SUM(CASE WHEN e.status = 'failed' THEN 1 ELSE 0 END), 0) AS failed_events,
@@ -616,7 +616,7 @@ class MonitoringRepository:
         count_row = dict(counts.one()._mapping)
 
         anomalies = await session.execute(
-            text(  # nosec B608 — parameterized SQLAlchemy query, not user input
+            text(
                 f"""
                 SELECT COUNT(*) AS active_anomalies
                 FROM anomaly_results ar
@@ -638,7 +638,7 @@ class MonitoringRepository:
         model_health = max(0.0, min(100.0, (1.0 - (active_anomalies / max(1, total_events))) * 100))
 
         timeseries = await session.execute(
-            text(  # nosec B608 — parameterized SQLAlchemy query, not user input
+            text(
                 f"""
                 SELECT
                     date_trunc('hour', ar.processed_at) AS bucket,
@@ -657,7 +657,7 @@ class MonitoringRepository:
         )
 
         severity = await session.execute(
-            text(  # nosec B608 — parameterized SQLAlchemy query, not user input
+            text(
                 f"""
                 SELECT
                     {MonitoringRepository.SEVERITY_SQL} AS severity,
@@ -728,7 +728,7 @@ class MonitoringRepository:
         where_sql = " AND ".join(where_clauses)
 
         rows = await session.execute(
-            text(  # nosec B608 — parameterized SQLAlchemy query, not user input
+            text(
                 f"""
                 SELECT
                     ar.id AS numeric_alert_id,
@@ -755,7 +755,7 @@ class MonitoringRepository:
         )
 
         total = await session.execute(
-            text(  # nosec B608 — parameterized SQLAlchemy query, not user input
+            text(
                 f"""
                 SELECT COUNT(*) AS total
                 FROM anomaly_results ar
@@ -783,7 +783,7 @@ class MonitoringRepository:
             return None
 
         row = await session.execute(
-            text(  # nosec B608 — parameterized SQLAlchemy query, not user input
+            text(
                 f"""
                 SELECT
                     ar.id AS numeric_alert_id,
