@@ -7,21 +7,35 @@ populates ``sys.modules["app"]``.  Every subsequent file that needs a
 *different* ``app`` then imports the wrong package, causing collection
 failures.
 
-The ``pytest_collect_file`` hook runs just before pytest imports a test file,
-so purging stale ``app.*`` entries here gives each file a clean slate.
+``pytest_collect_file`` returns a custom ``IsolatedModule`` collector for
+each test file.  Its ``collect()`` method purges stale ``app.*`` entries from
+``sys.modules`` *before* the file is imported, giving each file a clean slate.
 """
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Iterator
 
 import pytest
+from _pytest.python import Module
 
 
-def pytest_collect_file(parent: pytest.Collector, file_path: Path) -> pytest.Collector | None:  # noqa: ARG001
-    """Purge stale ``app.*`` module entries before each test file is imported."""
-    stale = [key for key in sys.modules if key == "app" or key.startswith("app.")]
-    for key in stale:
-        del sys.modules[key]
+class IsolatedModule(Module):
+    """Module collector that purges stale ``app.*`` entries before importing."""
+
+    def collect(self) -> Iterator:  # type: ignore[override]
+        stale = [k for k in sys.modules if k == "app" or k.startswith("app.")]
+        for k in stale:
+            del sys.modules[k]
+        yield from super().collect()
+
+
+def pytest_collect_file(parent: pytest.Collector, file_path: Path) -> pytest.Collector | None:
+    """Return an IsolatedModule collector for test files."""
+    if file_path.suffix == ".py" and (
+        file_path.name.startswith("test_") or file_path.name.endswith(".test.py")
+    ):
+        return IsolatedModule.from_parent(parent, path=file_path)
     return None
