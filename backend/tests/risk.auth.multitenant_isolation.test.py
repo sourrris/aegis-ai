@@ -22,8 +22,6 @@ from risk_common.schemas_v2 import AuthClaims
 
 
 def _make_app_with_auth(fake_token_payload: dict | None) -> FastAPI:
-    from app.api import routes_auth_v2
-
     app = FastAPI()
     app.include_router(routes_events_v2.router)
     app.state.rabbit_channel = SimpleNamespace()
@@ -160,6 +158,7 @@ async def test_resolve_tenant_context_uses_provided_tenant_when_no_role_mapping(
 @pytest.mark.asyncio
 async def test_worker_v2_dedup_key_is_tenant_scoped(monkeypatch: pytest.MonkeyPatch) -> None:
     import json
+
     from app.application.processor import EventProcessor
     from risk_common.schemas_v2 import RiskEventV2
 
@@ -222,7 +221,6 @@ async def test_worker_v2_dedup_key_is_tenant_scoped(monkeypatch: pytest.MonkeyPa
     class _FixedProcessor(EventProcessor):
         async def _call_inference(self, event_id, transaction, features):
             from risk_common.schemas import InferenceResponse
-            from uuid import uuid4 as _uuid4
 
             return InferenceResponse(
                 event_id=event_id,

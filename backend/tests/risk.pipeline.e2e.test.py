@@ -20,7 +20,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "services" / "risk"
 from app.api import deps, routes_events_v2
 from app.application.processor import EventProcessor
 from app.infrastructure.db import get_db_session
-from risk_common.schemas import InferenceResponse
 from risk_common.schemas_v2 import AuthClaims
 
 
