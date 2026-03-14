@@ -80,7 +80,7 @@ class _FakeRedis:
 class _FakeMessage:
     def __init__(self, body: dict):
         self.body = json.dumps(body, default=str).encode()
-        self.headers = {}
+        self.headers: dict[str, str] = {}
         self.acked = False
 
     async def ack(self):
