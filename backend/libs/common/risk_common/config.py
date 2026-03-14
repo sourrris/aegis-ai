@@ -10,7 +10,7 @@ class BaseServiceSettings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
 
-    api_host: str = "0.0.0.0"
+    api_host: str = "0.0.0.0"  # nosec B104 — intentional: microservice binds all interfaces in container
     api_port: int = 8000
 
     rabbitmq_url: str = Field(
