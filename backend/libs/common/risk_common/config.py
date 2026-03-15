@@ -9,7 +9,9 @@ class BaseServiceSettings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
 
-    api_host: str = "0.0.0.0"  # nosec B104 — intentional: microservice binds all interfaces in container
+    # nosec B104
+    # Intentional: this service binds all interfaces inside a container.
+    api_host: str = "0.0.0.0"
     api_port: int = 8000
 
     rabbitmq_url: str = Field(
