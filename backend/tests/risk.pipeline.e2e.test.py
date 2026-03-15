@@ -25,6 +25,10 @@ from app.application.processor import EventProcessor  # noqa: I001
 # KEEP app.application.* cached from the worker so test functions can do
 # 'import app.application.processor as processor_mod' without re-importing.
 sys.modules.pop("app", None)
+# Remove root + infrastructure sub-modules so the API service re-imports them
+for _k in list(sys.modules):
+    if _k == "app" or _k == "app.infrastructure" or _k.startswith("app.infrastructure."):
+        del sys.modules[_k]
 sys.path[0] = str(Path(__file__).resolve().parents[1] / "services" / "risk" / "api")
 from app.api import deps, routes_events_v2  # noqa: E402
 from app.infrastructure.db import get_db_session  # noqa: E402
